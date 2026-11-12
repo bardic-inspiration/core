@@ -144,7 +144,7 @@ function resolve({ doc, layers }: Layered, issues: Issue[]): Registry {
   const globals = new Map<string, FieldSpec>();
   const registry = {
     doc, id: doc.ruleset.id, version: doc.ruleset.version, layers, seats: doc.seats, enums,
-    space: doc.space ?? { grid: 'none' as const },
+    space: doc.space ?? { grid: 'none' as const }, hasSpace: doc.space !== undefined,
     globals, kinds, relations,
     signals: new Map<string, SignalSpec>(), procedures: new Map<string, ProcedureSpec>(),
     intents: new Map<string, IntentSpec>(), cellLayers: new Map<string, CellLayerSpec>(),
@@ -152,7 +152,20 @@ function resolve({ doc, layers }: Layered, issues: Issue[]): Registry {
   } as unknown as Registry;
 
   if (registry.space.vertical) issue('space.vertical', 'vertical movement is not supported by this core yet');
-  if (registry.space.grid === 'none' && Object.keys(doc.space ?? {}).length > 1) issue('space', 'a ruleset with no grid declares nothing else about space');
+  // Without a grid a space is a plane: it has a unit, a size, places, and a standard map, and nothing about cells.
+  const gridless = ['grid', 'unit', 'size', 'places', 'map'];
+  for (const key of Object.keys(doc.space ?? {})) {
+    if (registry.space.grid === 'none' && !gridless.includes(key)) {
+      issue(`space.${key}`, 'a ruleset with no grid declares nothing else about space than its unit, size, places, and standard map');
+    }
+  }
+  const { size } = registry.space;
+  if (size) {
+    const [least, most] = [size.min ?? [1, 1], size.max ?? [Infinity, Infinity]];
+    if (least[0] > most[0] || least[1] > most[1]) issue('space.size', 'the smallest map is larger than the largest');
+    const fixed = [registry.space.width, registry.space.height];
+    if (fixed.some((side, i) => side !== undefined && (side < least[i] || side > most[i]))) issue('space.size', 'the fixed width and height are outside these bounds');
+  }
 
   for (const [name, layerDoc] of Object.entries(registry.space.layers ?? {})) {
     const path = `space.layers.${name}`;
@@ -164,7 +177,7 @@ function resolve({ doc, layers }: Layered, issues: Issue[]): Registry {
     }
     const reason = invalid(registry, staticWorld, emptyState(), layerType, layerDoc.default);
     if (reason) issue(`${path}.default`, reason);
-    registry.cellLayers.set(name, { name, type: layerType, default: layerDoc.default as Value });
+    registry.cellLayers.set(name, { name, type: layerType, default: layerDoc.default as Value, mutable: layerDoc.mutable === true });
   }
 
   for (const [name, raw] of Object.entries(doc.globals ?? {})) {
@@ -225,8 +238,8 @@ function resolve({ doc, layers }: Layered, issues: Issue[]): Registry {
   const hostNow = () => {
     const session = registry.active;
     if (!session) throw new RuleError('spatial functions need a running match');
-    if (registry.space.grid === 'none') throw new RuleError('this ruleset declares no space');
-    return registry.trace ? tracedHost(session.world.host, registry.trace) : session.world.host;
+    if (registry.space.grid === 'none') throw new RuleError(registry.hasSpace ? "this ruleset's space has no grid" : 'this ruleset declares no space');
+    return registry.trace ? tracedHost(session.host, registry.trace) : session.host;
   };
   registerFunctions(env, hostNow);
 
@@ -366,6 +379,23 @@ function resolve({ doc, layers }: Layered, issues: Issue[]): Registry {
     if (source !== undefined) registry[rule] = expr(source, new Map([['cell', 'CellData']]), `space.${rule}`, ['bool'], issue, 'ruleset.', staticEnv);
   }
 
+  // What every cell must pass. The default cell is checked here, once; a map's cells when it loads; a written cell when it is written.
+  const cellChecks = (registry.space.checks ?? []).map((check, index) => ({
+    that: expr(check.that, new Map([['cell', 'CellData']]), `space.checks.${index}.that`, ['bool'], issue, 'ruleset.', staticEnv),
+    message: check.message,
+  }));
+  registry.cellFails = (values) => cellChecks
+    .filter((check) => check.that.run({ cell: registry.cellData(values), tables: registry.tables }) !== true)
+    .map((check) => check.message);
+  if (issues.length === 0 && cellChecks.length > 0) {
+    try {
+      const defaults = Object.fromEntries([...registry.cellLayers.values()].map((layer) => [layer.name, layer.default]));
+      for (const message of registry.cellFails(defaults)) issue('space.layers', `a cell with every layer at its default fails a check: ${message}`);
+    } catch (error) {
+      issue('space.checks', (error as Error).message.split('\n')[0]);
+    }
+  }
+
   // ── Visibility, then kinds: inits, derived values, checks ────────────────
   const SEAT: ValueType = { k: 'seat' };
   for (const [name, raw] of Object.entries(doc.globals ?? {})) {
@@ -495,6 +525,17 @@ function resolve({ doc, layers }: Layered, issues: Issue[]): Registry {
         const d = expr(fx.roll.d, here(), `${path}.roll.d`, ['int']);
         declare(fx.roll.as, INT, `${path}.roll.as`);
         out.push({ op: 'roll', as: fx.roll.as, n, d });
+      } else if ('at' in fx) {
+        // A write to the ground: one cell's layers, each of which the ruleset must have declared mutable.
+        const at = expr(fx.at, here(), `${path}.at`, ['Cell']);
+        const writes = Object.entries(fx.set as Record<string, Expr>).flatMap(([name, source]) => {
+          const layer = registry.cellLayers.get(name);
+          if (!layer) issue(`${path}.set.${name}`, 'the ruleset declares no such cell layer');
+          else if (!layer.mutable) issue(`${path}.set.${name}`, `the layer "${name}" is not mutable, so play cannot write it`);
+          else return [{ layer: name, type: layer.type, value: expr(source, here(), `${path}.set.${name}`, [celType(layer.type)]) }];
+          return [];
+        });
+        out.push({ op: 'ground', at, writes });
       } else if ('set' in fx) {
         const writes = Object.entries(fx.set as Record<string, Expr>).flatMap(([address, source]): { target: SetTarget; value: Compiled }[] => {
           const at = `${path}.set.${address}`;

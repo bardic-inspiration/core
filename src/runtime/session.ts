@@ -3,7 +3,7 @@
 // demand, and follows relations. State never changes under a session: every
 // write produces a new state and a new session.
 
-import { Cell, type HostCall, type SpaceHost } from '../lib/functions.ts';
+import { Cell, type HostCall, type SpaceHost, type SpaceMap } from '../lib/functions.ts';
 import { RuleError, type Compiled, type FieldSpec, type KindSpec, type Registry } from '../compile/program.ts';
 import type { ValueType } from '../types.ts';
 import { showType } from '../types.ts';
@@ -12,7 +12,10 @@ import type { State, Value } from './state.ts';
 
 /** What stays fixed for a whole match: the space, its host, and the seats. */
 export interface World {
+  /** The host of the map as the scenario gives it. */
   host: SpaceHost;
+  /** The map with what play has changed laid over it, and its host. Absent when the ruleset has no grid. */
+  ground?: (overlay: State['ground']) => { map: SpaceMap; host: SpaceHost };
   space: { width: number; height: number; unit: number };
   seats: string[];
 }
@@ -101,6 +104,11 @@ export class Session {
     this.world = world;
     this.viewer = viewer;
     this.globals = registry.globalsFor(this);
+  }
+
+  /** The host of the ground as it stands in this state. */
+  get host(): SpaceHost {
+    return this.world.ground ? this.world.ground(this.state.ground ?? {}).host : this.world.host;
   }
 
   /**

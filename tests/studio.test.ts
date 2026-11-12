@@ -181,6 +181,7 @@ describe('cell layers', () => {
       ],
       blocksMove: [{ x: 1, y: 0 }],
       blocksSight: [{ x: 1, y: 0 }, { x: 0, y: 1 }],
+      places: {},
     } satisfies SpaceMap);
   });
 

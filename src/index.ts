@@ -28,4 +28,4 @@ export { hashSeed, nextRandom, rollDice } from './runtime/rng.ts';
 export { hashLog, playMatch, summarize } from './record.ts';
 export type { MatchRecord, SeatRecord } from './record.ts';
 export { createGridHost, compareHosts } from './host/grid.ts';
-export type { CellValues, HostCall, Point, SpaceHost, SpaceMap } from './lib/functions.ts';
+export type { CellValues, HostCall, Place, Point, SpaceHost, SpaceMap } from './lib/functions.ts';

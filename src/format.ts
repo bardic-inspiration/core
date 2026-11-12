@@ -97,6 +97,7 @@ export type EffectDoc =
   | { let: Record<string, Expr> }
   | { roll: { as: string; n?: Expr; d: Expr } }
   | { set: Record<string, Expr> }
+  | { at: Expr; set: Record<string, Expr> }
   | { create: { kind: string; as?: string; fields?: Record<string, Expr> } }
   | { destroy: Expr }
   | { link: { rel: string; from: Expr; to: Expr } }
@@ -128,6 +129,8 @@ export interface CellLayerDoc {
   type: string;
   /** The value of a cell the scenario says nothing about. */
   default: unknown;
+  /** Whether play may write it. Absent or false: the map's value stands for the whole match. */
+  mutable?: boolean;
   doc?: string;
 }
 
@@ -154,6 +157,14 @@ export interface SpaceDoc {
   blocksMove?: Expr;
   /** A bool expression over `cell`: such a cell breaks a line of sight that crosses it. The host respects it. */
   blocksSight?: Expr;
+  /** The smallest and largest a map may be, each as `[width, height]`. */
+  size?: { min?: [number, number]; max?: [number, number] };
+  /** What every cell must pass: bool expressions over `cell`, as a kind's checks are over `self`. */
+  checks?: CheckDoc[];
+  /** Places every map must have, by name. */
+  places?: string[];
+  /** The ruleset's standard map: the one a scenario gets when it names none, and with `only`, the one every scenario is played on. */
+  map?: { standard: string; only?: boolean };
 }
 
 export interface PatternUse {
@@ -222,6 +233,9 @@ export interface KitDoc {
 /** Cells listed one by one: where each is, and any of the ruleset's layers. */
 export type MapCells = ({ at: [number, number] } & Record<string, unknown>)[];
 
+/** Named places on a map: `{ gate: { at: [x, y] }, yard: { at: [x, y], size: [w, h] } }`. */
+export type MapPlaces = Record<string, { at: [number, number]; size?: [number, number] }>;
+
 /**
  * A map: one playing environment for a ruleset. The ruleset's `space` says
  * what a map is made of; this gives a size and the cells' values, as a
@@ -241,6 +255,8 @@ export interface MapDoc {
   rows?: string[];
   /** Single cells, which override the picture. */
   cells?: MapCells;
+  /** Named places: a point, or with `size` an area from that corner. */
+  places?: MapPlaces;
 }
 
 export interface ScenarioDoc {
@@ -251,7 +267,7 @@ export interface ScenarioDoc {
   /** The id of the map document the scenario is played on. Give this or `space`, not both. */
   map?: string;
   /** A map written inline. Each entry of `cells` gives one cell's layer values: `{ at: [x, y], terrain: wall }`. */
-  space?: { width: number; height: number; cells?: MapCells };
+  space?: { width: number; height: number; cells?: MapCells; places?: MapPlaces };
   game?: Record<string, unknown>;
   entities?: { id?: string; kind: string; fields?: Record<string, unknown> }[];
   links?: { rel: string; from: string; to: string }[];

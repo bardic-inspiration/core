@@ -27,6 +27,7 @@ function authored(event: GameEvent): Authored {
     case 'create': return { create: { kind: event.kind, id: event.id, fields: event.fields } };
     case 'set': return { set: { id: event.id, field: event.field, key: event.key, value: event.value } };
     case 'destroy': return { destroy: event.id };
+    case 'ground': return { ground: { at: event.at, layer: event.layer, value: event.value } };
     case 'link': return { link: { rel: event.rel, from: event.from, to: event.to } };
     case 'unlink': return { unlink: { rel: event.rel, from: event.from, to: event.to } };
     default: throw new RuleError(`entry ${event.seq} (${event.t}) is not a change a referee can author`);

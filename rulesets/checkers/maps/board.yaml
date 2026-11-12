@@ -1,0 +1,7 @@
+# The draughts board: 8 by 8, with nothing in its cells. Which squares are
+# dark is the ruleset's rule, not the map's.
+format: 2
+map: { id: board, title: Draughts board }
+ruleset: { id: checkers, version: 0.2.1 }
+width: 8
+height: 8

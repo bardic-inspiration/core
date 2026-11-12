@@ -2,7 +2,7 @@
 // ruleset's `space`, and the 5e slice's square grid played on one.
 
 import { describe, expect, it } from 'vitest';
-import { compareHosts, createGridHost, loadMap, Match, type SpaceMap } from '../src/index.ts';
+import { compareHosts, compileExpression, createGridHost, emptyState, fold, fork, loadMap, Match, replay, type SpaceMap } from '../src/index.ts';
 import { loadRuleset, loadScenarioFile, readMaps, readYaml } from '../src/load.ts';
 import { compileWith, loadScenario, play, refusal, tiny, tinyScenario } from './helpers.ts';
 
@@ -51,6 +51,7 @@ describe('map documents', () => {
     ],
     blocksMove: [{ x: 1, y: 0 }],
     blocksSight: [{ x: 1, y: 0 }, { x: 0, y: 1 }],
+    places: {},
   };
 
   it('reads a picture: the first row is y = 0, and a symbol holds what the legend says', () => {
@@ -230,5 +231,283 @@ describe('the 5e square grid', () => {
   it('does not let a creature cut the corner of a boulder', () => {
     expect(moves(strip('.#..........', [0, 0]))).toEqual([{ x: 0, y: 1 }]);
     expect(moves(strip('.#..........', [0, 1]))).toEqual([{ x: 0, y: 0 }, { x: 1, y: 1 }]);
+  });
+});
+
+describe('map criteria', () => {
+  it.each<[string, (d: any) => void, RegExp]>([
+    ['a smallest map larger than the largest', (d) => { d.space.size = { min: [4, 4], max: [3, 3] }; }, /space\.size: the smallest map is larger than the largest/],
+    ['a check that is not a condition', (d) => { d.space.checks = [{ that: 'cell.height', message: 'x' }]; }, /space\.checks\.0\.that: is int, but bool is needed/],
+    ['a check that reads the match', (d) => { d.space.checks = [{ that: 'game.turns > 0', message: 'x' }]; }, /space\.checks\.0\.that/],
+    ['a default cell that fails a check', (d) => { d.space.checks = [{ that: 'cell.height > 0', message: 'ground is raised' }]; }, /every layer at its default fails a check: ground is raised/],
+    ['cell checks without a grid', (d) => { d.space = { grid: 'none', checks: [] }; }, /space\.checks: a ruleset with no grid declares nothing else about space/],
+  ])('refuses a ruleset with %s', (_, breakIt, reason) => {
+    expect(refusal(() => compileWith(gridded(breakIt)))).toMatch(reason);
+  });
+
+  const strict = compileWith(gridded((d) => {
+    d.space.size = { min: [3, 3], max: [4, 3] };
+    d.space.checks = [{ that: "cell.terrain != 'wall' || cell.height == 0", message: 'a wall has no height of its own' }];
+    d.space.places = ['gate'];
+  }));
+  const gated = (change: (doc: any) => void = () => {}) => yard((d) => {
+    d.places = { gate: { at: [2, 2] }, pen: { at: [0, 2], size: [2, 1] } };
+    change(d);
+  });
+
+  it('accepts a map that meets them, and hands its places on', () => {
+    expect(loadMap(strict, gated()).places).toEqual({ gate: { x: 2, y: 2 }, pen: { x: 0, y: 2, width: 2, height: 1 } });
+  });
+
+  it.each<[string, (d: any) => void, RegExp]>([
+    ['too small', (d) => { d.rows = ['.#.', '~..']; d.cells = []; d.places = { gate: { at: [2, 1] } }; }, /at least 3 by 3; this one is 3 by 2/],
+    ['too large', (d) => { d.rows = ['.#...', '~....', '.....']; }, /at most 4 by 3; this one is 5 by 3/],
+    ['a cell that fails a check', (d) => { d.legend['#'].height = 2; }, /map\.legend\.#: a wall has no height of its own/],
+    ['a listed cell that fails a check', (d) => { d.cells = [{ at: [1, 0], height: 1 }, { at: [2, 0], terrain: 'wall', height: 1 }]; }, /map\.cells\.1: a wall has no height of its own/],
+    ['no place the ruleset needs', (d) => { delete d.places.gate; }, /map\.places: the ruleset needs every map to have a place called "gate"/],
+    ['a place off the map', (d) => { d.places.gate.at = [3, 0]; }, /map\.places\.gate: is off the map/],
+    ['an area that runs off the map', (d) => { d.places.pen.size = [4, 1]; }, /map\.places\.pen: is off the map/],
+    ['a place between cells', (d) => { d.places.gate.at = [1.5, 2]; }, /map\.places\.gate: a place on a grid is given in whole cells/],
+  ])('refuses a map that is %s', (_, breakIt, reason) => {
+    expect(refusal(() => loadMap(strict, gated(breakIt)))).toMatch(reason);
+  });
+
+  it('lets a scenario stand an entity at a place by name', () => {
+    const scenario = loadScenario(strict, onMap((d) => { d.entities[0].fields.pos = 'gate'; d.entities[1].fields.pos = [0, 0]; }), { maps: { yard: gated() } });
+    expect(scenario.setup.find((event) => event.t === 'create')).toMatchObject({ fields: { pos: { x: 2, y: 2 } } });
+    expect(refusal(() => loadScenario(strict, onMap((d) => { d.entities[0].fields.pos = 'well'; }), { maps: { yard: gated() } })))
+      .toMatch(/entities\.0\.fields\.pos: the map has no place called "well"/);
+  });
+
+  it('holds an inline map to the same criteria', () => {
+    const inline = onMap((d) => { delete d.map; d.space = { width: 3, height: 3, cells: [{ at: [1, 1], terrain: 'wall', height: 1 }] }; });
+    const message = refusal(() => loadScenario(strict, inline));
+    expect(message).toMatch(/space\.cells\.0: a wall has no height of its own/);
+    expect(message).toMatch(/space\.places: the ruleset needs every map to have a place called "gate"/);
+  });
+});
+
+describe('standard maps', () => {
+  const standard = (only = false) => compileWith(gridded((d) => { d.space.map = { standard: 'yard', ...(only ? { only: true } : {}) }; }));
+  const bare = (change: (doc: any) => void = () => {}) => onMap((d) => { delete d.map; change(d); });
+  const field = yard((d) => { d.map.id = 'field'; });
+
+  it('is the map of a scenario that names none', () => {
+    expect(loadScenario(standard(), bare(), { maps: { yard: yard() } }).map!.id).toBe('yard');
+    expect(refusal(() => loadScenario(standard(), bare(), { maps: {} }))).toMatch(/the ruleset's standard map, "yard", was not given/);
+  });
+
+  it('gives way to a map the scenario names or writes, unless the ruleset allows no other', () => {
+    const maps = { yard: yard(), field };
+    const inline = bare((d) => { d.space = { width: 3, height: 3 }; });
+    expect(loadScenario(standard(), onMap((d) => { d.map = 'field'; }), { maps }).map!.id).toBe('field');
+    expect(loadScenario(standard(), inline, { maps }).map!.id).toBeUndefined();
+    expect(refusal(() => loadScenario(standard(true), onMap((d) => { d.map = 'field'; }), { maps }))).toMatch(/scenario\.map: the ruleset is played on its standard map, "yard", and no other/);
+    expect(refusal(() => loadScenario(standard(true), inline, { maps }))).toMatch(/scenario\.space: the ruleset is played on its standard map/);
+    expect(loadScenario(standard(true), onMap(), { maps }).map!.id).toBe('yard');
+  });
+
+  it('is the board every checkers scenario is played on', () => {
+    const checkers = loadRuleset('checkers');
+    const board = loadScenarioFile(checkers, 'checkers', 'standard').map!;
+    expect(board).toMatchObject({ id: 'board', grid: 'square', width: 8, height: 8, cells: [] });
+    const wide = { ...(readMaps('checkers').board as object), width: 10 };
+    expect(refusal(() => loadMap(checkers, wide))).toMatch(/at most 8 by 8; this one is 10 by 8/);
+  });
+});
+
+describe('a space with no grid', () => {
+  const holdem = loadRuleset('holdem');
+  const table = readMaps('holdem').table as any;
+
+  it('has maps with a size and places, and no cells', () => {
+    const map = loadMap(holdem, table);
+    expect(map).toMatchObject({ id: 'table', grid: 'none', width: 12, height: 8, cells: [], blocksMove: [], blocksSight: [] });
+    expect(map.places.board).toEqual({ x: 3.5, y: 3, width: 5, height: 1.5 });
+    expect(map.places.pot).toEqual({ x: 6, y: 5.25 });
+    expect(refusal(() => loadMap(holdem, { ...table, legend: { '.': {} }, rows: ['..'] }))).toMatch(/map\.rows: the ruleset has no grid, so its maps have no cells/);
+    expect(refusal(() => loadMap(holdem, { ...table, places: { pot: { at: [6, 5] } } }))).toMatch(/a place called "board"/);
+  });
+
+  it('gives a scenario its table, and still answers no question about cells', () => {
+    const scenario = loadScenarioFile(holdem, 'holdem', 'four-handed');
+    expect(scenario.map!.id).toBe('table');
+    expect(scenario.world.space).toEqual({ width: 12, height: 8, unit: 1 });
+    const match = new Match(holdem, scenario, 1);
+    expect(scenario.mapAt(match.state)).toBe(scenario.map);
+    const plane = compileWith(gridded((d) => { d.space = { grid: 'none' }; delete d.kinds.token.fields.pos; }));
+    expect(() => compileExpression(plane, 'distance(cell(0, 0), cell(1, 1))').evaluate(emptyState(), loadScenario(plane, { ...tinyScenario(), space: { width: 4, height: 4 } })))
+      .toThrow(/space has no grid/);
+  });
+});
+
+describe('mutable layers', () => {
+  /** Tokens may raise a wall on a neighbouring cell, or flatten one; `height` stays the map's. */
+  const digging = (change: (doc: any) => void = () => {}) => gridded((d) => {
+    d.space.layers.terrain.mutable = true;
+    d.space.checks = [{ that: "cell.terrain != 'mud' || cell.height > 0", message: 'mud lies on raised ground' }];
+    d.intents.wall = {
+      params: { token: { type: 'token', in: 'all.token.filter(t, t.owner == seat)' }, to: { type: 'cell', in: 'neighbors(token.pos)' } },
+      gate: '!all.token.exists(t, t.pos == to)',
+      effects: [{ at: 'to', set: { terrain: "'wall'" } }],
+    };
+    d.intents.clear = {
+      params: { to: { type: 'cell', in: "range(3).map(x, cell(x, 0)).filter(c, cellAt(c).terrain == 'wall')" } },
+      effects: [{ at: 'to', set: { terrain: "'open'" } }],
+    };
+    d.flow[0].do[0].do[0].prompt.offer = ['wall', 'clear', 'bump'];
+    change(d);
+  });
+  const registry = compileWith(digging());
+  const scenario = () => loadScenario(registry, onMap((d) => { d.seats.ref = { referee: true }; }), { maps: { yard: yard() } });
+  const take = (match: Match, intent: string, to: { x: number; y: number }) => {
+    const decision = match.advance()!;
+    const index = decision.options.findIndex((option) => option.intent === intent && JSON.stringify(option.params.to) === JSON.stringify(to));
+    if (index < 0) throw new Error(`cannot ${intent} ${JSON.stringify(to)}; legal: ${JSON.stringify(decision.options)}`);
+    match.submit(index);
+    match.advance();
+  };
+
+  it.each<[string, (d: any) => void, RegExp]>([
+    ['a layer the ruleset keeps fixed', (d) => { d.intents.wall.effects = [{ at: 'to', set: { height: 1 } }]; }, /set\.height: the layer "height" is not mutable, so play cannot write it/],
+    ['a layer the ruleset does not declare', (d) => { d.intents.wall.effects = [{ at: 'to', set: { cover: 1 } }]; }, /set\.cover: the ruleset declares no such cell layer/],
+    ['a value of the wrong type', (d) => { d.intents.wall.effects = [{ at: 'to', set: { terrain: '3' } }]; }, /set\.terrain: is int, but string is needed/],
+    ['somewhere that is not a cell', (d) => { d.intents.wall.effects = [{ at: 'token', set: { terrain: "'wall'" } }]; }, /\.at: is .*, but Cell is needed/],
+  ])('refuses a rule that writes %s', (_, breakIt, reason) => {
+    expect(refusal(() => compileWith(digging(breakIt)))).toMatch(reason);
+  });
+
+  it('writes a cell as one log event, held in the state as an overlay', () => {
+    const on = scenario();
+    const match = new Match(registry, on, 1);
+    take(match, 'wall', { x: 1, y: 1 });
+    const event = match.log.find((entry) => entry.t === 'ground')!;
+    expect(event).toMatchObject({ t: 'ground', at: { x: 1, y: 1 }, layer: 'terrain', value: 'wall' });
+    expect(match.log[event.cause!]).toMatchObject({ t: 'intent', intent: 'wall' });
+    expect(match.state.ground).toEqual({ '1,1': { terrain: 'wall' } });
+    expect(fold(match.log)).toEqual(match.state);
+  });
+
+  it('leaves the map as it was, and gives the ground of any state', () => {
+    const on = scenario();
+    const before = structuredClone(on.map);
+    const match = new Match(registry, on, 1);
+    const start = match.state;
+    take(match, 'wall', { x: 1, y: 1 });
+    expect(on.map).toEqual(before);
+    expect(on.mapAt(start)).toBe(on.map);
+    const now = on.mapAt(match.state)!;
+    expect(now.cells.find((cell) => cell.x === 1 && cell.y === 1)!.values).toEqual({ terrain: 'wall', height: 0 });
+    expect(now.blocksMove).toEqual([{ x: 1, y: 0 }, { x: 1, y: 1 }]);
+    expect(now.blocksSight).toEqual([{ x: 1, y: 0 }, { x: 0, y: 1 }, { x: 1, y: 1 }]);
+    // A second match on the same scenario starts from the map, not from the first match's ground.
+    expect(on.mapAt(new Match(registry, on, 2).state)).toBe(on.map);
+  });
+
+  it('answers the rules from the ground as it now stands', () => {
+    const on = scenario();
+    const match = new Match(registry, on, 1);
+    const ask = (source: string) => compileExpression(registry, source).evaluate(match.state, on);
+    expect(ask('inBounds(cell(1, 1))')).toBe(true);
+    take(match, 'wall', { x: 1, y: 1 });
+    expect(ask("cellAt(cell(1, 1)).terrain")).toBe('wall');
+    expect(ask('inBounds(cell(1, 1))')).toBe(false);
+    expect(ask('lineOfSight(cell(0, 0), cell(2, 2))')).toBe(false);
+    // The wall the map began with can be taken down, and the cell opens.
+    take(match, 'clear', { x: 1, y: 0 });
+    expect(ask('inBounds(cell(1, 0))')).toBe(true);
+    expect(on.mapAt(match.state)!.blocksMove).toEqual([{ x: 1, y: 1 }]);
+  });
+
+  it('does not log a write that changes nothing, and refuses one that breaks a check or leaves the map', () => {
+    const stay = compileWith(digging((d) => {
+      d.intents.wall.effects = [{ at: 'cell(1, 0)', set: { terrain: "'wall'" } }];
+      d.intents.clear.effects = [{ at: 'cell(2, 2)', set: { terrain: "'mud'" } }];
+      d.intents.bump.effects = [{ at: 'cell(9, 9)', set: { terrain: "'wall'" } }];
+    }));
+    const play = (intent: string) => {
+      const match = new Match(stay, loadScenario(stay, onMap(), { maps: { yard: yard() } }), 1);
+      match.submit(match.advance()!.options.findIndex((option) => option.intent === intent));
+      match.advance();
+      return match;
+    };
+    expect(play('wall').log.some((entry) => entry.t === 'ground')).toBe(false);
+    expect(() => play('clear')).toThrow(/\(2, 2\): mud lies on raised ground/);
+    expect(() => play('bump')).toThrow(/\(9, 9\) is off the map/);
+  });
+
+  it('replays to the same log, and forks to the same ground', () => {
+    const on = scenario();
+    const match = new Match(registry, on, 1);
+    take(match, 'wall', { x: 1, y: 1 });
+    take(match, 'wall', { x: 1, y: 2 });
+    match.author('ref', [{ ground: { at: [2, 1], layer: 'terrain', value: 'mud' } }]);
+    const again = replay(registry, on, match.log);
+    expect(again.log).toEqual(match.log);
+    expect(on.mapAt(again.state)).toEqual(on.mapAt(match.state));
+    const second = match.log.filter((entry) => entry.t === 'intent')[1];
+    const branch = fork(registry, on, match.log, second.seq);
+    expect(branch.state.ground).toEqual({ '1,1': { terrain: 'wall' } });
+  });
+
+  it('lets a referee write a mutable layer, under the same rules', () => {
+    const on = scenario();
+    const match = new Match(registry, on, 1);
+    match.advance();
+    match.author('ref', [{ ground: { at: { x: 2, y: 1 }, layer: 'terrain', value: 'mud' } }]);
+    expect(match.log.at(-1)).toMatchObject({ t: 'ground', at: { x: 2, y: 1 }, layer: 'terrain', value: 'mud', by: 'ref' });
+    expect(() => match.author('ref', [{ ground: { at: [2, 2], layer: 'height', value: 3 } }])).toThrow(/"height" is not mutable/);
+    expect(() => match.author('ref', [{ ground: { at: [2, 2], layer: 'terrain', value: 'lava' } }])).toThrow(/not a valid terrain/);
+    expect(() => match.author('ref', [{ ground: { at: [2, 2], layer: 'terrain', value: 'mud' } }])).toThrow(/mud lies on raised ground/);
+    expect(() => match.author('ref', [{ ground: { at: [5, 5], layer: 'terrain', value: 'wall' } }])).toThrow(/off the map/);
+  });
+});
+
+describe('a 5e spell that changes the ground', () => {
+  const registry = loadRuleset('dnd-5e-2024-slice');
+  const duel = loadScenarioFile(registry, 'dnd-5e-2024-slice', 'mage-duel');
+
+  it('turns the open squares around its target into the terrain it leaves', () => {
+    const doc = readYaml('rulesets/dnd-5e-2024-slice/scenarios/mage-duel.yaml') as any;
+    delete doc.space;
+    doc.map = 'lane';
+    for (const entity of doc.entities) {
+      if (entity.id === 'ember') Object.assign(entity.fields, { pos: [6, 1], initiative: 1 });
+      if (entity.id === 'rime') Object.assign(entity.fields, { pos: [1, 1] });
+    }
+    const lane = {
+      format: 2, map: { id: 'lane' }, ruleset: { id: 'dnd-5e-2024-slice', version: '0.4.0' },
+      legend: { '.': {}, '#': { terrain: 'rock' } }, rows: ['.......#', '........', '......#.'],
+    };
+    const on = loadScenario(registry, doc, { maps: { lane } });
+    const match = new Match(registry, on, 1);
+    for (let decision = match.advance(); decision; decision = match.advance()) {
+      const cast = decision.options.findIndex((option) => option.intent === 'castGround');
+      if (cast >= 0) {
+        expect(decision.options[cast].params).toMatchObject({ actor: 'rime', spell: 'grease', slot: 1, at: { x: 6, y: 1 } });
+        match.submit(cast);
+        break;
+      }
+      match.submit(decision.options.findIndex((option) => ['endTurn', 'holdReaction'].includes(option.intent)));
+    }
+    // Ember may counter it; either way the match is consistent, and when it works the ground changes.
+    for (let decision = match.advance(); decision && decision.seat !== 'rime'; decision = match.advance()) {
+      match.submit(decision.options.findIndex((option) => option.intent === 'holdReaction'));
+    }
+    const terrain = (x: number, y: number) => on.world.ground!(match.state.ground).host.cellAt({ x, y }).terrain;
+    expect([5, 6, 7].flatMap((x) => [0, 1, 2].map((y) => terrain(x, y)))).toEqual(
+      ['difficult', 'difficult', 'difficult', 'difficult', 'difficult', 'rock', 'rock', 'difficult', 'difficult']);
+    expect(terrain(4, 1)).toBe('open');
+    expect(match.log.filter((entry) => entry.t === 'ground')).toHaveLength(7);
+    expect(on.map!.cells).toHaveLength(2);
+  });
+
+  it('is cast in recorded play, and those matches replay', () => {
+    const seed = [1, 2, 3, 4, 5, 6, 7, 8].find((candidate) => play(registry, duel, candidate).log.some((entry) => entry.t === 'ground'))!;
+    expect(seed).toBeDefined();
+    const { log, match } = play(registry, duel, seed);
+    expect(replay(registry, duel, log).log).toEqual(log);
+    expect(fold(log)).toEqual(match.state);
+    expect(Object.keys(match.state.ground).length).toBeGreaterThan(0);
   });
 });

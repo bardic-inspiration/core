@@ -33,6 +33,7 @@ const effect = {
     closed({ let: exprMap }, ['let']),
     closed({ roll: closed({ as: name, n: expr, d: expr }, ['as', 'd']) }, ['roll']),
     closed({ set: { type: 'object', minProperties: 1, additionalProperties: expr } }, ['set']),
+    closed({ at: expr, set: { type: 'object', minProperties: 1, propertyNames: { pattern: NAME }, additionalProperties: expr } }, ['at', 'set']),
     closed({ create: closed({ kind: name, as: name, fields: exprMap }, ['kind']) }, ['create']),
     closed({ destroy: expr }, ['destroy']),
     closed({ link }, ['link']),
@@ -52,6 +53,8 @@ const effect = {
   ],
 };
 
+const pair = { type: 'array', items: { type: 'integer', minimum: 1 }, minItems: 2, maxItems: 2 };
+
 const body = {
   uses: {
     type: 'array',
@@ -64,8 +67,12 @@ const body = {
     grid: { enum: ['square', 'none'] }, adjacency: { enum: [4, 8] }, corners: { enum: ['open', 'closed'] },
     unit: { type: 'integer', minimum: 1 }, increment: { type: 'integer', minimum: 1 },
     vertical: { type: 'boolean' }, width: { type: 'integer', minimum: 1 }, height: { type: 'integer', minimum: 1 },
-    layers: named(closed({ type: { type: 'string' }, default: {}, doc: { type: 'string' } }, ['type', 'default'])),
+    layers: named(closed({ type: { type: 'string' }, default: {}, mutable: { type: 'boolean' }, doc: { type: 'string' } }, ['type', 'default'])),
     blocksMove: expr, blocksSight: expr,
+    size: closed({ min: pair, max: pair }),
+    checks: { type: 'array', items: closed({ that: expr, message: { type: 'string' } }, ['that', 'message']) },
+    places: { type: 'array', items: name, uniqueItems: true },
+    map: closed({ standard: { type: 'string', pattern: '^[a-z0-9][a-z0-9-]*$' }, only: { type: 'boolean' } }, ['standard']),
   }, ['grid']),
   globals: named(field),
   kinds: named(closed({
@@ -151,6 +158,10 @@ const cells = {
   },
 };
 const id = { type: 'string', pattern: '^[a-z0-9][a-z0-9-]*$' };
+const places = named(closed({
+  at: { type: 'array', items: { type: 'number' }, minItems: 2, maxItems: 2 },
+  size: { type: 'array', items: { type: 'number', exclusiveMinimum: 0 }, minItems: 2, maxItems: 2 },
+}, ['at']));
 
 const mapSchema = closed({
   format: { type: 'integer' },
@@ -160,7 +171,7 @@ const mapSchema = closed({
   // A symbol is one character; what it holds is checked against the ruleset's layers.
   legend: { type: 'object', minProperties: 1, propertyNames: { pattern: '^.$' }, additionalProperties: { type: 'object', propertyNames: { pattern: NAME } } },
   rows: { type: 'array', minItems: 1, items: { type: 'string', minLength: 1 } },
-  cells,
+  cells, places,
 }, ['format', 'map', 'ruleset']);
 
 const scenarioSchema = closed({
@@ -172,7 +183,7 @@ const scenarioSchema = closed({
     additionalProperties: closed({ behavior: name, referee: { type: 'boolean' } }),
   },
   map: id,
-  space: closed({ width: { type: 'integer', minimum: 1 }, height: { type: 'integer', minimum: 1 }, cells }, ['width', 'height']),
+  space: closed({ width: { type: 'integer', minimum: 1 }, height: { type: 'integer', minimum: 1 }, cells, places }, ['width', 'height']),
   game: { type: 'object' },
   entities: {
     type: 'array',

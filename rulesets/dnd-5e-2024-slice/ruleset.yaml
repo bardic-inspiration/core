@@ -68,7 +68,7 @@ enums:
   expiry: [never, sourceTurnStart, saveAtTurnEnd]
   castTime: [action, bonus, reaction]
   # How a spell resolves. Spells are scenario content; these are the shapes the rules know.
-  spellForm: [attack, save, darts, heal, burst, ward, counter, step]
+  spellForm: [attack, save, darts, heal, burst, ward, counter, step, ground]
 
 tables:
   # Hit Die by creature size.
@@ -86,6 +86,7 @@ tables:
 # costs the same as any other, but cannot cross the corner of a square that is
 # filled. Rock cannot be entered or seen through; the host works movement and
 # line of sight out from these two rules. A map is a document under maps/.
+# Terrain is mutable: a spell can change what a square holds during play.
 space:
   grid: square
   adjacency: 8
@@ -93,7 +94,7 @@ space:
   unit: 5
   increment: 5
   layers:
-    terrain: { type: terrain, default: open }
+    terrain: { type: terrain, default: open, mutable: true }
   blocksMove: "cell.terrain == 'rock'"
   blocksSight: "cell.terrain == 'rock'"
 
@@ -203,7 +204,8 @@ kinds:
       form: spellForm
       time: { type: castTime, default: action }
       range: { type: int, default: 0 }
-      radius: { type: int, default: 0, doc: For a burst. }
+      radius: { type: int, default: 0, doc: "For a burst, and for a spell that changes the ground." }
+      leaves: { type: terrain, default: open, doc: The terrain a ground spell turns open squares into. }
       save: { type: ability, default: dex, doc: The saving throw it calls for. }
       count: { type: int, default: 1, doc: "How many attacks or darts." }
       countPerLevel: { type: int, default: 0, doc: More of them for each slot level above the spell's. }
@@ -221,7 +223,8 @@ kinds:
     checks:
       - { that: "self.level >= 0 && self.level <= 9", message: spell levels run from 0 to 9 }
       - { that: "self.die >= 2 && self.dice >= 0 && self.count >= 1", message: a spell's dice must make sense }
-      - { that: "(self.form == 'burst') == (self.radius > 0)", message: a burst needs a radius and nothing else has one }
+      - { that: "(self.form == 'burst') == (self.radius > 0) || self.form == 'ground'", message: a burst needs a radius and only a ground spell may have one too }
+      - { that: "(self.form == 'ground') == (self.leaves != 'open')", message: a ground spell leaves a terrain behind and nothing else does }
 
   effect:
     doc: Something lasting on a creature - a condition, a bonus, or both.
@@ -669,6 +672,39 @@ intents:
                   amount: "saved ? (spell.half ? floorDiv(damage + spell.flat, 2) : 0) : damage + spell.flat"
                   damageType: spell.damageType
 
+  castGround:
+    doc: >-
+      Cast a spell that changes the ground under an enemy, such as Grease: every open square within its radius
+      becomes the terrain it leaves. It takes the lowest slot that will do. The change lasts the match; a duration
+      is not modelled.
+    params:
+      actor: creature
+      spell:
+        type: spell
+        in: >-
+          actor.knows.filter(s, actor.able && s.form == 'ground'
+            && (s.time == 'bonus' ? actor.bonus > 0 : s.time == 'action' && actor.action > 0))
+      slot: { type: int, in: "cel.bind(levels, actor.slotLevels.filter(l, l >= spell.level && !actor.slotSpent), levels.size() > 0 ? [levels.min()] : levels)" }
+      at:
+        type: cell
+        in: >-
+          all.creature.filter(c, !c.defeated && c.side != actor.side && distance(actor.pos, c.pos) <= spell.range
+            && cellAt(c.pos).terrain == 'open').map(c, c.pos)
+    gate: "lineOfSight(actor.pos, at)"
+    effects:
+      - call: spend
+        with: { caster: actor, spell: spell }
+      - call: declare
+        with: { caster: actor, spell: spell, level: slot }
+        as: { works: works }
+      - if: works
+        then:
+          - each: square
+            in: "cellsWithin(at, spell.radius).filter(p, cellAt(p).terrain == 'open')"
+            do:
+              - at: square
+                set: { terrain: spell.leaves }
+
   castStep:
     doc: Cast a spell that teleports the caster to an empty square it can see, such as Misty Step. It takes the lowest slot that will do.
     params:
@@ -798,7 +834,7 @@ intents:
     effects: []
 
 menus:
-  turn: [attack, cast, castAt, castStep, move, dash, disengage, nimbleEscape, standUp, endTurn]
+  turn: [attack, cast, castAt, castGround, castStep, move, dash, disengage, nimbleEscape, standUp, endTurn]
   reaction: [opportunityAttack, holdReaction]
   ward: [castWard, holdReaction]
   counter: [counterspell, holdReaction]

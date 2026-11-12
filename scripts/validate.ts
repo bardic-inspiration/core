@@ -64,10 +64,14 @@ try {
   console.log('Maps');
   for (const ruleset of new Set(scenarios.map((entry) => entry.ruleset))) {
     const { registry } = scenarios.find((entry) => entry.ruleset === ruleset)!;
-    for (const [id, doc] of Object.entries(readMaps(ruleset))) {
+    const maps = readMaps(ruleset);
+    const standard = registry.space.map?.standard;
+    if (standard !== undefined && !(standard in maps)) fail(`${registry.id}: its standard map, "${standard}", is not under maps/`);
+    for (const [id, doc] of Object.entries(maps)) {
       try {
         const map = loadMap(registry, doc);
-        ok(`${registry.id} maps/${id}: ${map.width} by ${map.height}, ${map.cells.length} cells given`);
+        const holds = map.grid === 'none' ? `no grid, ${Object.keys(map.places).length} places` : `${map.cells.length} cells given`;
+        ok(`${registry.id} maps/${id}${id === standard ? ' (standard)' : ''}: ${map.width} by ${map.height}, ${holds}`);
       } catch (error) {
         if (!(error instanceof CompileError)) throw error;
         fail(`${registry.id} maps/${id}: ${error.message}`);

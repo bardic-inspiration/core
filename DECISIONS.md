@@ -508,8 +508,7 @@ the same.
 
 ### Where maps go next
 
-Agreed after the first pass, and not built. D64 to D69 are the plan; the
-order is in `HANDOFF.md`.
+Agreed after the first pass, and since built: D70 to D76 say how.
 
 **D64. A map is a bounded plane, and a grid is one expression of rules over
 it. (reframes D58)** The plane has an extent and a unit of measure, and
@@ -559,3 +558,60 @@ hold. Not in this pass: play on a plane without a grid (free positions,
 straight-line distance, shapes that block), which is a second set of
 questions for the host; cells hidden from some seats; and a map that
 changes size during play.
+
+### Building the map plan
+
+**D70. Criteria live in `space`: `size`, `checks`, `places`. (builds D65)**
+`size` is a smallest and a largest `[width, height]`. `checks` are bool
+expressions over `cell`, compiled where the blocking rules are, so they see
+one cell's values and the tables and nothing of a match. The default cell
+is checked when the ruleset compiles, a map's cells when it loads, and a
+written cell when it is written. `places` lists names every map must have.
+
+**D71. `space.map` names the standard map. (builds D66)** `{ standard: id,
+only }`. The ruleset names a map document and does not contain it, so the
+map stays a document like any other and core still reads no files; the
+check that the document exists is `npm run validate`'s. Checkers dropped
+its fixed `width` and `height` for a size of exactly 8 by 8 and its board
+as the only map. Hold 'em's table is standard but not the only one, since
+the table in the file is laid for four.
+
+**D72. A space with `grid: none` is a plane. (builds D64)** It may declare
+a unit, a size, places, and a standard map, and nothing about cells. Its
+maps are a size and places in game units. No host is built for one and the
+spatial functions refuse, so nothing about play changed for hold 'em; the
+table exists for whoever draws it. A ruleset with no `space` section still
+has no map at all.
+
+**D73. A place is a point or a rectangle, and scenarios use it by name.
+(builds D69)** `{ at, size }`. A scenario's `cell` field may be a place's
+name, resolved when the scenario loads, so the log and the state hold
+cells as before. Expressions cannot read places yet: a rule that needs one
+would want its name checked at compile time, which only the ruleset's
+required `places` could give, and nothing shipped asks for it.
+
+**D74. The `at` effect writes the ground. (builds D67)** `at: <cell>` with
+`set: { layer: expr }`. Why a new effect and not an address in `set`: a
+`set` key is an address of state, and a cell is not one. The compiler
+refuses a layer that is not `mutable`. A referee's `author` takes the same
+change and is held to the same rule: mutable is what the ruleset allows,
+not who is asking.
+
+**D75. The overlay is `state.ground`, and the host is rebuilt per ground.
+(builds D68)** One `ground` log entry per layer written; state holds only
+the written layers, by `"x,y"`. `Scenario.mapAt(state)` and the host come
+from the map patched with the overlay, kept by the overlay's identity, so
+`fold`, replay, forks, and snapshots needed no change of their own. The
+cost is one host built per write to the ground; a ruleset that never
+writes builds one host, as before. Blocking is worked out again only for
+written cells. The overlay is keyed by cell for now: "by place" in D68
+meant that the event and the state are not shaped around a grid, and a
+key is all that would change.
+
+**D76. The 5e proof is a spell form, `ground`.** `castGround` turns the
+open squares within a spell's radius into the terrain it `leaves`; Grease
+in the mage duel leaves Difficult Terrain under an enemy. Its saving
+throw and its duration are not written: the ground stays changed for the
+match. Rime casts it as an opening move, in 12 of the 40 recorded duels,
+which were regenerated. Checkers and hold 'em went to 0.2.1 and their logs
+are unchanged.

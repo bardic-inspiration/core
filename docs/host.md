@@ -48,18 +48,36 @@ over as plain data
 | Field | Holds |
 |---|---|
 | `id` | The map document's id. Absent when the map was written inline in a scenario. |
-| `grid`, `adjacency`, `unit` | The ruleset's grid: `square`, 4 or 8, and game units per cell. |
+| `grid`, `adjacency`, `unit` | The ruleset's grid: `square`, 4 or 8, and game units per cell. `grid` is `none` for a plane with no grid: such a map has a size and places, and no host is built for it. |
 | `corners` | `open` or `closed`: whether a diagonal step may pass the corner of a cell that blocks movement. It changes `neighbors` and nothing else; `distance` and `cellsWithin` still count cells by the shortest route. |
 | `width`, `height` | The map's size in cells. |
 | `defaults` | The layer values of every cell not listed in `cells`. |
 | `cells` | The cells the map gives values to: `{ x, y, values }`, every layer filled in. |
-| `blocksMove`, `blocksSight` | The cells the ruleset's two space rules hold for, as `{ x, y }`. |
+| `blocksMove`, `blocksSight` | The cells the ruleset's two space rules hold for, as `{ x, y }`, in row order. |
+| `places` | Named places, by name: `{ x, y }`, with a `width` and `height` when it is an area. In cells on a grid, in game units without one. |
 
 ```ts
 const scenario = loadScenario(registry, doc, { host: (map) => myGeometryHost(map) });
 ```
 
-`scenario.map` is the same data, for drawing. `loadMap(registry, mapDoc)`
+### When play changes the map
+
+A ruleset may let play write a cell's layers (`mutable` in
+[`format.md`](format.md#what-play-may-change)). The host stays pure all
+the same: it is never told of a change. When a match writes a cell, core
+lays the match's changes over the map, works the two blocking rules out
+again for the cells that changed, and calls the host factory with that
+map. A host is therefore a function of one map and nothing else, and the
+factory is called once for each ground a match passes through, the
+starting map included. A host that is costly to build should build from
+the map it is given without assuming it is the first.
+
+`scenario.mapAt(state)` is the map as it stands in any state: for the
+current one, or for `fold(log.slice(0, n))` when scrubbing. It returns the
+same object for the same `state.ground`, so it can be compared by identity
+to tell whether the board needs drawing again.
+
+`scenario.map` is the same data as the host was first given, for drawing. `loadMap(registry, mapDoc)`
 gives it for a map document without a scenario: enough to draw a board, or to
 build a host and ask it questions, before anything stands on it. The map is
 all a view needs for the ground: the size, each cell's layer values, and
@@ -96,7 +114,8 @@ seat is driven the same way. `step(seats)` does both with a driver.
 | `match.explain()` | Why the pending decision offers what it does (below). |
 | `match.scores(behavior, seat, options)` | A behavior's utility for each option. |
 | `match.snapshot()`, `Match.restore(...)` | The match as plain data at a decision, and back. |
-| `match.author(...)`, `match.adjudicate(...)` | A referee seat's changes and rulings. |
+| `match.author(...)`, `match.adjudicate(...)` | A referee seat's changes and rulings. A change may be `{ ground: { at, layer, value } }`, a write to a mutable layer. |
+| `scenario.mapAt(state)` | The map as it stands in a state, with what play has changed. |
 | `summarize(registry, scenario, log, drivers)` | The match's record, from its log alone ([`data/README.md`](../data/README.md)). |
 
 ### Explaining a decision

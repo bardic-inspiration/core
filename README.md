@@ -122,6 +122,7 @@ Read next:
 | [`src/runtime/`](src/runtime) | State and events, the expression session, the match machine, maps, scenarios, seats, replay and forks, the seeded RNG. |
 | [`src/expression.ts`](src/expression.ts), [`src/record.ts`](src/record.ts) | Free-standing expressions over any state, and a match's record from its log. |
 | [`src/host/grid.ts`](src/host/grid.ts) | A reference space host for headless play. |
+| [`src/runtime/map.ts`](src/runtime/map.ts) | Maps: checked against a ruleset's `space`, and patched with what play has changed. |
 | [`src/load.ts`](src/load.ts) | Reads YAML from disk. Core itself never touches the file system. |
 | [`kit/`](kit), [`rulesets/`](rulesets) | Pure data. |
 | [`scripts/`](scripts) | `play` prints a match, `sim` records matches, `validate` is the pull-request check, `browser` times core in a Web Worker against Node. |

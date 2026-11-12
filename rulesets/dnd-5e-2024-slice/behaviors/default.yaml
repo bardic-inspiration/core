@@ -200,6 +200,9 @@ behaviors:
     scores:
       cast: *spellValue
       castAt: *burstValue
+      # An opening move: worth an early level 1 slot while the enemy stands on open ground, ahead of a cantrip.
+      # After that an action is better spent on damage.
+      castGround: "slot == 1 && actor.slots['1'] >= 3 ? 290 : -1"
       # Steps in when the enemy is out of reach, and out when it is too close.
       castStep: >-
         cel.bind(foes, all.creature.filter(c, c.side != actor.side && !c.defeated),

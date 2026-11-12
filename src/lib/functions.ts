@@ -30,7 +30,8 @@ export type CellValues = Record<string, number | boolean | string>;
 export interface SpaceMap {
   /** The map document's id; absent when the map was written inline in a scenario. */
   id?: string;
-  grid: 'square';
+  /** `none`: a plane with no grid. It has a size and places, and no cells; the host is asked nothing about it. */
+  grid: 'square' | 'none';
   /** Whether diagonal neighbours are adjacent (8) or not (4). */
   adjacency: 4 | 8;
   /** `closed`: a diagonal step past the corner of a cell that blocks movement is not a step to a neighbour. */
@@ -47,7 +48,11 @@ export interface SpaceMap {
   blocksMove: Point[];
   /** The cells the ruleset's `space.blocksSight` holds for. */
   blocksSight: Point[];
+  /** Named places: a point, or with a width and height an area from that corner. In cells on a grid, in game units without one. */
+  places: Record<string, Place>;
 }
+
+export type Place = { x: number; y: number; width?: number; height?: number };
 
 /**
  * What the engine must answer about space. Core specifies these; the engine

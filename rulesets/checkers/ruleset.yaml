@@ -1,11 +1,16 @@
 # English draughts. A closed game written in the open-game format: nothing is
 # authored during play, and the scenario declares the end.
 format: 2
-ruleset: { id: checkers, version: 0.2.0, title: Checkers (English draughts) }
+ruleset: { id: checkers, version: 0.2.1, title: Checkers (English draughts) }
 
 seats: [red, black]
 
-space: { grid: square, adjacency: 8, width: 8, height: 8 }
+# The board is the ruleset's standard map, maps/board.yaml, and every scenario is played on it.
+space:
+  grid: square
+  adjacency: 8
+  size: { min: [8, 8], max: [8, 8] }
+  map: { standard: board, only: true }
 
 globals:
   chain: { type: string, default: "", doc: "The piece that must keep jumping, if any." }

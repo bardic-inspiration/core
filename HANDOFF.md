@@ -8,7 +8,7 @@ calls is in [`docs/host.md`](docs/host.md).
 
 ## What works
 
-Everything below is exercised by `npm run validate` (420 tests, and every
+Everything below is exercised by `npm run validate` (453 tests, and every
 shipped scenario played).
 
 - **The format and compiler.** YAML rulesets are schema-checked, patterns are
@@ -97,27 +97,35 @@ groundwork.
   other step, closed corners (`space.corners`, a new part of the host
   contract), and Difficult Terrain at 10 feet a square. The pack ambush is
   played on `maps/rocky-pass.yaml`.
-- **Not yet:** cover from what stands between two squares, obscured areas,
-  creatures larger than one square, and a map a rule can change. The grid
-  rules were written from the 2024 rules' "Playing on a Grid" and have not
-  been checked against ttrpg-library.
-
-**The plan from here** (D64 to D69, agreed and not built). A map is a
-bounded plane; the square grid is one expression of rules over it, and the
-only one built. In order:
-
-1. **Map criteria in the ruleset**: bounds on the extent, and checks over a
-   cell's values, enforced by `loadMap`.
-2. **Standard maps**: a ruleset ships one, a scenario that names none gets
-   it, and a ruleset may allow no other. Move checkers onto one. Separate
-   "no grid" from "no space", add named places, and give hold 'em a table.
-3. **Mutable layers**: `mutable` on a layer, a write to a cell as a log
-   event, and the overlay in state. The host is handed the patched map.
-   Prove it in the 5e slice with one layer and one rule that writes it,
-   and with replay and fork tests.
-
-Steps 1 and 2 are small and independent. Step 3 is one piece of work, it
-changes the host contract, and it carries the risk.
+- **What a map must be.** A ruleset's `space` gives bounds on a map's
+  size, checks every cell must pass, and places every map must have
+  (D70). `loadMap` enforces them, for inline maps too.
+- **Standard maps.** A ruleset names one, a scenario that gives no map
+  gets it, and a ruleset may allow no other (D71). Checkers is played on
+  `maps/board.yaml` and nothing else.
+- **A space without a grid.** A plane with a size and named places (D72,
+  D73). Hold 'em has a table. A scenario can stand an entity at a place by
+  name.
+- **Mutable layers.** A layer the ruleset marks `mutable` can be written
+  by a rule (`at` ... `set`) or a referee. Each write is a `ground` entry
+  in the log; the state holds the changes as an overlay, and the map
+  document is never touched (D74, D75). The rules and the host answer from
+  the ground as it stands; `scenario.mapAt(state)` gives it for any state.
+  Replay, forks, and snapshots hold. In the 5e slice, Grease turns the
+  ground under an enemy into Difficult Terrain (D76).
+- **Not yet:**
+  - Play on a plane without a grid: free positions, straight-line
+    distance, shapes that block.
+  - Expressions cannot read a place.
+  - Cells hidden from some seats, and a map that changes size.
+  - A change to the ground that ends by itself: Grease lasts the match.
+  - Checks over a whole map, such as "every area can be reached".
+  - In the 5e slice: cover from what stands between two squares, obscured
+    areas, and creatures larger than one square. The grid rules were
+    written from the 2024 rules' "Playing on a Grid" and have not been
+    checked against ttrpg-library.
+  - A host is built again for every write to the ground. Fine at these
+    sizes; a large map written often would want the host patched instead.
 
 ### Core in a Web Worker against Node
 
@@ -176,7 +184,7 @@ computed map key (D34), and one list function (D35).
 | checkers/standard | red 22, black 16, draw 2 | 73 | 5.1, 16 | 227 | 46 |
 | 5e/worg-vs-scout | monsters 27, adventurers 13 | 37 | 9.5, 12 | 199 | 18 |
 | 5e/pack-ambush | monsters 25, adventurers 15 | 169 | 9.6, 20 | 980 | 114 |
-| 5e/mage-duel | red 25, blue 15 | 88 | 62.3, 334 | 615 | 107 |
+| 5e/mage-duel | red 26, blue 14 | 87 | 62.6, 334 | 618 | 110 |
 | holdem/four-handed | shark 19, random 8, station 7, maniac 6 | 109 | 4.6, 6 | 1,474 | 68 |
 | junkyard/yard | census (11 bots on average) | 584 | 8.1, 41 | 2,642 | 346 |
 
@@ -184,7 +192,7 @@ Things in it worth a look later:
 
 - The mage duel has the widest choice by far, from burst and teleport
   targets. Counterspell was cast 31 times and stopped the spell 21 times;
-  Shield was cast 186 times.
+  Shield was cast 185 times, and Grease 12.
 - In the junkyard, 38% of decisions had one legal intent, and more than half
   of all choices were `idle`. Bots built from a part that is not a leg cannot
   move, and bots run out of charge. The raider swarm ends largest.
@@ -202,11 +210,11 @@ Things in it worth a look later:
 - **Kind checks** are not enforced after every write (D12).
 - **Rollback.** There is no undo; the log supports it but nothing winds back.
 - **Behavior** is one-step utility scoring (D20, D42).
-- **Space rules are static.** `blocksMove` and `blocksSight` read a cell's
-  layers and nothing else, and a rule cannot write a cell. A door that opens
-  is still an entity standing in a cell, not a change to the map (D52).
-- **Cell layers are not in the log.** They are the scenario's, held by the
-  host; a log rebuilds a match's state but not its map (D52).
+- **Space rules read one cell.** `blocksMove` and `blocksSight` read a
+  cell's layers and nothing else (D52). A door blocks when it is a value
+  of a mutable layer, not when it is an entity standing in the cell.
+- **A log does not hold its map.** It holds what play changed on it
+  (D75); the map itself is the scenario's.
 - **`inBounds` means two things**: on the map, and open to movement (D50).
 - **Seat streams are not hidden.** `state.streams` is in every seat's view.
 - **A strict content security policy** needs `unsafe-eval` for the schema
@@ -253,7 +261,7 @@ Suggested order.
 8. **Analyse the data.** Vary one behavior or one stat at a time with
    `npm run sim -- --only` and compare outcomes; the records are built for
    that.
-9. **Maps**: the plan under [Maps](#maps) above.
+9. **Maps**: what is listed as not yet under [Maps](#maps) above.
 10. **The studio** (the engine's first form): implement `SpaceHost` to
    `docs/host.md`, run matches in workers, and render from the event log's
    tree. Its design is in the `space` repository.
