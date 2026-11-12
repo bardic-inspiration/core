@@ -1,13 +1,21 @@
 # A combat slice of D&D 5e (SRD 5.2): initiative, turns, movement on a grid,
-# weapon attacks with advantage and critical hits, opportunity attacks, and
-# hit points. Every number a stat block derives is derived here too, from the
-# same inputs ttrpg-library stores (rulesets/dnd-5e-2024/derive.ts).
+# weapon attacks with advantage and critical hits, opportunity attacks, hit
+# points, saving throws, conditions, damage types, and spellcasting with
+# slots, reactions, and concentration. Every number a stat block derives is
+# derived here too, from the same inputs ttrpg-library stores
+# (rulesets/dnd-5e-2024/derive.ts).
+#
+# Two things are entities while they are in flight, so that a reaction can
+# change them before they land: a `casting` (a spell being cast, which a
+# Counterspell can stop) and a `wound` (damage being dealt, which Resistance
+# halves). Both are created, announced with a signal, read back, and
+# destroyed inside one procedure.
 #
 # This work includes material from the System Reference Document 5.2
 # ("SRD 5.2") by Wizards of the Coast LLC, available at
 # https://www.dndbeyond.com/srd. The SRD 5.2 is licensed under CC-BY-4.0.
 format: 1
-ruleset: { id: dnd-5e-2024-slice, version: 0.1.0, title: D&D 5e (SRD 5.2) combat slice }
+ruleset: { id: dnd-5e-2024-slice, version: 0.2.0, title: D&D 5e (SRD 5.2) combat slice }
 
 # What homebrew may change. `x.+` allows additions directly under x and
 # nothing else, so homebrew can add kinds, fields, intents, signals, tables,
@@ -36,23 +44,37 @@ uses:
       name: hp
       # Average hit points: Hit Dice at their average, rounded down, plus Constitution.
       max: "max(1, floorDiv(self.hitDice * (tables.hitDie[self.size] + 1), 2) + self.hitDice * self.mod['con'])"
-  - { pattern: budget, with: { kind: creature, name: movement, amount: self.speed, signal: turn.start, who: actor } }
+  - pattern: budget
+    with: { kind: creature, name: movement, amount: "self.incapacitated ? 0 : max(0, self.speedNow)", signal: turn.start, who: actor }
   - { pattern: budget, with: { kind: creature, name: action, amount: 1, signal: turn.start, who: actor } }
+  - { pattern: budget, with: { kind: creature, name: bonus, amount: 1, signal: turn.start, who: actor } }
   - { pattern: budget, with: { kind: creature, name: reaction, amount: 1, signal: turn.start, who: actor } }
   - { pattern: check, with: { name: d20Test, sides: 20 } }
   - pattern: duration
     with: { name: exposure, target: creature, owner: creature, inverse: exposures, signal: turn.start, who: actor }
   - pattern: slots
     with: { relation: wields, holder: creature, item: weapon, inverse: wielders, capacity: 2 }
+  # Armor Class and Speed are a stat-block number plus whatever lasting effects add or take away.
+  - pattern: stacking
+    with: { kind: creature, name: armorClass, base: self.ac, source: "self.effects.map(e, e.acBonus)", rule: sum }
+  - pattern: stacking
+    with: { kind: creature, name: speedNow, base: self.speed, source: "self.effects.map(e, e.speedBonus)", rule: sum }
 
 enums:
   ability: [str, dex, con, int, wis, cha]
   size: [tiny, small, medium, large, huge, gargantuan]
-  damageType: [bludgeoning, piercing, slashing]
+  damageType: [bludgeoning, piercing, slashing, fire, cold, force, radiant]
+  condition: [none, prone, paralyzed, slowed, shielded]
+  # When a lasting effect ends by itself.
+  expiry: [never, sourceTurnStart, saveAtTurnEnd]
+  castTime: [action, bonus, reaction]
+  # How a spell resolves. Spells are scenario content; these are the shapes the rules know.
+  spellForm: [attack, save, darts, heal, burst, ward, counter, step]
 
 tables:
   # Hit Die by creature size.
   hitDie: { tiny: 4, small: 6, medium: 8, large: 10, huge: 12, gargantuan: 20 }
+  sizeRank: { tiny: 0, small: 1, medium: 2, large: 3, huge: 4, gargantuan: 5 }
   # Proficiency Bonus by Challenge Rating.
   proficiencyByCr:
     { "0": 2, "1/8": 2, "1/4": 2, "1/2": 2, "1": 2, "2": 2, "3": 2, "4": 2, "5": 3, "6": 3, "7": 3, "8": 3,
@@ -81,6 +103,14 @@ kinds:
       attacksLeft: { type: int, default: 0 }
       initiative: { type: int, default: 0 }
       defeated: { type: bool, default: false }
+      saves: { type: list<ability>, default: [], doc: Saving throws it is proficient in. }
+      resists: { type: list<damageType>, default: [], doc: Damage types it has Resistance to. }
+      packTactics: { type: bool, default: false, doc: Advantage on an attack roll when an able ally is within 5 feet of the target. }
+      nimbleEscape: { type: bool, default: false, doc: Can Disengage as a Bonus Action. }
+      disengaged: { type: bool, default: false, doc: Its movement provokes no Opportunity Attacks this turn. }
+      castingAbility: { type: ability, default: int }
+      slots: { type: "map<string,int>", default: {}, doc: "Spell slots left, by slot level ('1', '2', ...)." }
+      slotSpent: { type: bool, default: false, doc: Has cast a spell with a slot this turn. Only one is allowed per turn. }
     derived:
       mod:
         type: "map<ability,int>"
@@ -88,14 +118,43 @@ kinds:
         doc: Ability modifiers. 5e rounds down, so a 9 gives -1.
         value: "floorDiv(self.ability[a] - 10, 2)"
       pb: { type: int, value: "tables.proficiencyByCr[self.cr]" }
+      save:
+        type: "map<ability,int>"
+        each: a
+        doc: Saving throw bonuses.
+        value: "self.mod[a] + (a in self.saves ? self.pb : 0)"
+      spellAttack: { type: int, value: "self.pb + self.mod[self.castingAbility]" }
+      spellDc: { type: int, value: "8 + self.pb + self.mod[self.castingAbility]" }
       reach:
         type: int
         doc: The longest reach among the melee weapons it wields.
         value: "self.wields.exists(w, !w.ranged) ? self.wields.filter(w, !w.ranged).map(w, w.reach).max() : 0"
+      conditions: { type: list<string>, value: "self.effects.map(e, e.condition)" }
+      prone: { type: bool, value: "'prone' in self.conditions" }
+      paralyzed: { type: bool, value: "'paralyzed' in self.conditions" }
+      shielded: { type: bool, value: "'shielded' in self.conditions" }
+      incapacitated: { type: bool, doc: "Cannot take actions, Bonus Actions, or Reactions.", value: "self.paralyzed" }
+      able: { type: bool, value: "!self.defeated && !self.incapacitated" }
+      threatened:
+        type: bool
+        doc: An able enemy is within 5 feet.
+        value: "all.creature.exists(c, c.side != self.side && c.able && distance(c.pos, self.pos) <= 5)"
+      slotLevels:
+        type: list<int>
+        doc: The slot levels it has a slot left in, lowest first.
+        value: "range(10).filter(l, string(l) in self.slots && self.slots[string(l)] > 0)"
+      concentrating: { type: bool, value: "all.effect.exists(e, e.concentration && e.source == self)" }
+      wardReady:
+        type: bool
+        doc: Could answer a hit with a warding spell such as Shield.
+        value: >-
+          self.able && self.reaction > 0 && !self.slotSpent && !self.shielded
+            && self.knows.exists(s, s.form == 'ward' && self.slotLevels.exists(l, l >= s.level))
     checks:
       - { that: "self.cr in tables.proficiencyByCr", message: the challenge rating is not in the CR table }
       - { that: "self.speed >= 0 && self.speed % 5 == 0", message: speed must be a multiple of 5 feet }
       - { that: "self.hitDice >= 1", message: a creature has at least one Hit Die }
+      - { that: "self.slots.all(l, self.slots[l] >= 0)", message: a creature cannot have fewer than no spell slots }
 
   weapon:
     fields:
@@ -112,75 +171,394 @@ kinds:
         type: bool
         default: false
         doc: On a hit, the next attack roll against the target before the attacker's next turn has Advantage.
+      knocksProne: { type: bool, default: false, doc: "A Large or smaller target it hits has the Prone condition." }
+      advantageDie: { type: int, default: 0, doc: An extra damage die of this many sides when the attack roll had Advantage. }
     derived:
       maxRange: { type: int, value: "self.ranged ? self.longRange : self.reach" }
     checks:
       - { that: "self.dice >= 1 && self.die >= 2", message: a weapon rolls at least one die }
       - { that: "!self.ranged || (self.range > 0 && self.longRange >= self.range)", message: a ranged weapon needs a normal and a long range }
 
+  spell:
+    doc: >-
+      A spell a creature knows. `form` picks how it resolves and the other
+      fields fill that form in, so a scenario can add a spell without a new rule.
+    fields:
+      name: string
+      level: { type: int, doc: "0 for a cantrip, which needs no slot." }
+      form: spellForm
+      time: { type: castTime, default: action }
+      range: { type: int, default: 0 }
+      radius: { type: int, default: 0, doc: For a burst. }
+      save: { type: ability, default: dex, doc: The saving throw it calls for. }
+      count: { type: int, default: 1, doc: "How many attacks or darts." }
+      countPerLevel: { type: int, default: 0, doc: More of them for each slot level above the spell's. }
+      dice: { type: int, default: 0 }
+      die: { type: int, default: 6 }
+      dicePerLevel: { type: int, default: 0 }
+      flat: { type: int, default: 0, doc: Added to each roll. }
+      addsModifier: { type: bool, default: false, doc: Adds the caster's spellcasting modifier. }
+      damageType: { type: damageType, default: force }
+      half: { type: bool, default: false, doc: Deals half damage on a successful save. }
+      applies: { type: condition, default: none, doc: The lasting effect it leaves on a hit or a failed save. }
+      ends: { type: expiry, default: never }
+      slow: { type: int, default: 0, doc: Feet of Speed its lasting effect takes away. }
+      concentration: { type: bool, default: false }
+    checks:
+      - { that: "self.level >= 0 && self.level <= 9", message: spell levels run from 0 to 9 }
+      - { that: "self.die >= 2 && self.dice >= 0 && self.count >= 1", message: a spell's dice must make sense }
+      - { that: "(self.form == 'burst') == (self.radius > 0)", message: a burst needs a radius and nothing else has one }
+
+  effect:
+    doc: Something lasting on a creature - a condition, a bonus, or both.
+    fields:
+      condition: { type: condition, default: none }
+      source: creature
+      ends: { type: expiry, default: never }
+      acBonus: { type: int, default: 0 }
+      speedBonus: { type: int, default: 0 }
+      save: { type: ability, default: wis, doc: "The save that ends it, for an effect a save ends." }
+      dc: { type: int, default: 0 }
+      concentration: { type: bool, default: false, doc: Ends when its source loses Concentration. }
+
+  casting:
+    doc: A spell in flight, from the moment it is cast until it takes effect or is countered.
+    fields:
+      caster: creature
+      spell: spell
+      level: int
+      countered: { type: bool, default: false }
+
+  wound:
+    doc: Damage in flight, from the roll until it comes off hit points.
+    fields:
+      target: creature
+      amount: int
+      damageType: damageType
+
+relations:
+  knows: { from: creature, to: spell, inverse: casters }
+  affects: { from: effect, to: creature, inverse: effects }
+
 signals:
   turn.start: { params: { actor: creature } }
   turn.end: { params: { actor: creature } }
   attack.hit: { params: { attacker: creature, target: creature, weapon: weapon, critical: bool } }
   attack.miss: { params: { attacker: creature, target: creature, weapon: weapon } }
+  save.rolled: { params: { creature: creature, ability: ability, dc: int, saved: bool } }
+  spell.cast: { params: { casting: casting }, doc: A spell has been cast and has not yet taken effect. }
+  spell.countered: { params: { casting: casting } }
+  wound.incoming: { params: { wound: wound }, doc: Damage is about to land. A reaction may change its amount. }
 
 reactions:
   - on: turn.start
     do:
-      - set: { actor.attacksLeft: 0 }
+      - set: { actor.attacksLeft: 0, actor.disengaged: false }
+      # One spell slot per turn, whoever's turn it is.
+      - each: caster
+        in: "all.creature.filter(c, c.slotSpent)"
+        do:
+          - set: { caster.slotSpent: false }
+      - each: expired
+        in: "all.effect.filter(e, e.ends == 'sourceTurnStart' && e.source == actor)"
+        do:
+          - destroy: expired
+  - on: turn.end
+    doc: An effect that a save ends is saved against at the end of each of the creature's turns.
+    do:
+      - each: lasting
+        in: "actor.effects.filter(e, e.ends == 'saveAtTurnEnd')"
+        do:
+          - call: savingThrow
+            with: { creature: actor, ability: lasting.save, dc: lasting.dc }
+            as: { saved: saved }
+          - if: saved
+            then:
+              - destroy: lasting
   - on: hp.empty
     do:
       - set: { target.defeated: true }
+      # What it was sustaining goes with it.
+      - each: lapsed
+        in: "all.effect.filter(e, e.source == target && (e.concentration || e.ends == 'sourceTurnStart'))"
+        do:
+          - destroy: lapsed
+  - on: wound.incoming
+    doc: Resistance halves the damage.
+    when: "wound.damageType in wound.target.resists"
+    do:
+      - set: { wound.amount: "floorDiv(wound.amount, 2)" }
+  - on: spell.cast
+    doc: Each enemy who can counter the spell is asked, in turn, until one does.
+    do:
+      - each: foe
+        in: >-
+          all.creature.filter(c, c.side != casting.caster.side && c.able && c.reaction > 0 && !c.slotSpent
+            && lineOfSight(c.pos, casting.caster.pos)
+            && c.knows.exists(s, s.form == 'counter' && distance(c.pos, casting.caster.pos) <= s.range
+              && c.slotLevels.exists(l, l >= s.level)))
+        do:
+          - if: "!casting.countered"
+            then:
+              - prompt:
+                  seat: foe.seat
+                  with: { actor: foe, casting: casting }
+                  offer: [counter]
 
 procedures:
-  strike:
-    doc: One weapon attack, from the roll to the damage.
-    params: { attacker: creature, weapon: weapon, target: creature }
+  attackRoll:
+    doc: >-
+      One attack roll against a creature's Armor Class, with whatever gives
+      Advantage or Disadvantage. A target that is hit may answer with a
+      warding spell, which can turn the hit into a miss.
+    params: { attacker: creature, target: creature, bonus: int, ranged: bool, normalRange: int }
+    returns: { hit: bool, critical: bool, advantage: bool }
     do:
+      - let: { span: "distance(attacker.pos, target.pos)" }
       - let:
-          advantage: "target.exposures.size() > 0"
-          # Ranged attacks have Disadvantage beyond normal range, or with an enemy within 5 feet.
+          advantage: >-
+            target.exposures.size() > 0 || target.incapacitated || (target.prone && span <= 5)
+              || (attacker.packTactics && all.creature.exists(c, c.id != attacker.id && c.side == attacker.side
+                && c.able && distance(c.pos, target.pos) <= 5))
+          # Ranged attacks have Disadvantage beyond normal range, or with an able enemy within 5 feet.
           disadvantage: >-
-            weapon.ranged && (distance(attacker.pos, target.pos) > weapon.range
-              || all.creature.exists(c, c.side != attacker.side && !c.defeated && distance(c.pos, attacker.pos) <= 5))
+            attacker.prone || (target.prone && span > 5) || (ranged && (span > normalRange || attacker.threatened))
       - each: used
         in: target.exposures
         do:
           - destroy: used
       - call: d20Test
-        with:
-          bonus: "attacker.pb + attacker.mod[weapon.ability]"
-          mode: "(advantage ? 1 : 0) - (disadvantage ? 1 : 0)"
+        with: { bonus: bonus, mode: "(advantage ? 1 : 0) - (disadvantage ? 1 : 0)" }
         as: { natural: natural, total: total }
-      # A 20 on the die always hits and is a Critical Hit; a 1 always misses.
-      - if: "natural != 1 && (natural == 20 || total >= target.ac)"
+      # A 20 on the die always hits; a 1 always misses.
+      - let: { hit: "natural != 1 && (natural == 20 || total >= target.armorClass)" }
+      - if: "hit && natural != 20 && target.wardReady"
         then:
-          - roll: { as: damage, n: "weapon.dice * (natural == 20 ? 2 : 1)", d: weapon.die }
+          - prompt:
+              seat: target.seat
+              with: { actor: target, total: total }
+              offer: [ward]
+          - let: { hit: "total >= target.armorClass" }
+      - let:
+          # A 20 is a Critical Hit, and so is any hit on a Paralyzed creature from within 5 feet.
+          critical: "hit && (natural == 20 || (target.paralyzed && span <= 5))"
+          advantage: "advantage && !disadvantage"
+
+  strike:
+    doc: One weapon attack, from the roll to the damage.
+    params: { attacker: creature, weapon: weapon, target: creature }
+    do:
+      - call: attackRoll
+        with:
+          attacker: attacker
+          target: target
+          bonus: "attacker.pb + attacker.mod[weapon.ability]"
+          ranged: weapon.ranged
+          normalRange: "weapon.ranged ? weapon.range : weapon.reach"
+        as: { hit: hit, critical: critical, edge: advantage }
+      - if: hit
+        then:
+          - roll: { as: damage, n: "weapon.dice * (critical ? 2 : 1)", d: weapon.die }
+          - let: { extra: 0 }
+          - if: "edge && weapon.advantageDie > 0"
+            then:
+              - roll: { as: more, n: "critical ? 2 : 1", d: weapon.advantageDie }
+              - let: { extra: more }
           - emit: attack.hit
-            with: { attacker: attacker, target: target, weapon: weapon, critical: "natural == 20" }
-          - emit: hp.lose
-            with: { target: target, amount: "max(0, damage + attacker.mod[weapon.ability])" }
+            with: { attacker: attacker, target: target, weapon: weapon, critical: critical }
+          - call: harm
+            with: { target: target, amount: "damage + extra + attacker.mod[weapon.ability]", damageType: weapon.damageType }
           - if: "weapon.exposes && !target.defeated"
             then:
               - create: { kind: exposure, as: mark, fields: { source: attacker } }
               - link: { rel: exposureOn, from: mark, to: target }
+          - if: "weapon.knocksProne && !target.defeated && !target.prone && tables.sizeRank[target.size] <= tables.sizeRank['large']"
+            then:
+              - create: { kind: effect, as: floored, fields: { condition: "'prone'", source: attacker } }
+              - link: { rel: affects, from: floored, to: target }
         else:
           - emit: attack.miss
             with: { attacker: attacker, target: target, weapon: weapon }
 
+  harm:
+    doc: >-
+      Deals damage. The damage is a `wound` while it is in flight: reactions
+      to `wound.incoming` may change its amount before it comes off hit
+      points. Damage can break the target's Concentration.
+    params: { target: creature, amount: int, damageType: damageType }
+    do:
+      - create: { kind: wound, as: wound, fields: { target: target, amount: "max(0, amount)", damageType: damageType } }
+      - emit: wound.incoming
+        with: { wound: wound }
+      - let: { dealt: "max(0, wound.amount)" }
+      - destroy: wound
+      - emit: hp.lose
+        with: { target: target, amount: dealt }
+      - if: "dealt > 0 && !target.defeated && target.concentrating"
+        then:
+          - call: savingThrow
+            with: { creature: target, ability: "'con'", dc: "max(10, floorDiv(dealt, 2))" }
+            as: { held: saved }
+          - if: "!held"
+            then:
+              - each: lost
+                in: "all.effect.filter(e, e.concentration && e.source == target)"
+                do:
+                  - destroy: lost
+
+  savingThrow:
+    doc: A saving throw against a DC. A Paralyzed creature fails Strength and Dexterity saves without a roll.
+    params: { creature: creature, ability: ability, dc: int }
+    returns: { saved: bool }
+    do:
+      - let: { saved: false }
+      - if: "!(creature.paralyzed && (ability == 'str' || ability == 'dex'))"
+        then:
+          - call: d20Test
+            with: { bonus: "creature.save[ability]", mode: 0 }
+            as: { total: total }
+          - let: { saved: "total >= dc" }
+      - emit: save.rolled
+        with: { creature: creature, ability: ability, dc: dc, saved: saved }
+
+  declare:
+    doc: >-
+      Begins casting a spell. The spell is a `casting` while it is in flight,
+      so a reaction to `spell.cast` can counter it. A countered spell uses up
+      the casting time but not the slot.
+    params: { caster: creature, spell: spell, level: int }
+    returns: { works: bool }
+    do:
+      - create: { kind: casting, as: casting, fields: { caster: caster, spell: spell, level: level } }
+      - if: "level > 0"
+        then:
+          - set: { caster.slotSpent: true }
+      - emit: spell.cast
+        with: { casting: casting }
+      - let: { works: "!casting.countered" }
+      - destroy: casting
+      - if: "level > 0"
+        then:
+          - if: works
+            then:
+              - set: { "caster.slots[string(level)]": "caster.slots[string(level)] - 1" }
+            else:
+              - set: { caster.slotSpent: false }
+      # A new Concentration spell ends the old one.
+      - if: "works && spell.concentration"
+        then:
+          - each: old
+            in: "all.effect.filter(e, e.concentration && e.source == caster)"
+            do:
+              - destroy: old
+
+  spend:
+    doc: Pays a spell's casting time.
+    params: { caster: creature, spell: spell }
+    do:
+      - if: "spell.time == 'bonus'"
+        then:
+          - set: { caster.bonus: "caster.bonus - 1" }
+        else:
+          - set: { caster.action: "caster.action - 1" }
+
+  afflict:
+    doc: Leaves a spell's lasting effect on a creature, replacing the same effect from the same caster.
+    params: { caster: creature, spell: spell, target: creature }
+    do:
+      - if: "spell.applies != 'none' && !target.defeated"
+        then:
+          - each: old
+            in: "target.effects.filter(e, e.condition == spell.applies && e.source == caster)"
+            do:
+              - destroy: old
+          - create:
+              kind: effect
+              as: mark
+              fields:
+                condition: spell.applies
+                source: caster
+                ends: spell.ends
+                speedBonus: "-spell.slow"
+                save: spell.save
+                dc: caster.spellDc
+                concentration: spell.concentration
+          - link: { rel: affects, from: mark, to: target }
+
+  resolveSpell:
+    doc: What a spell aimed at one creature does once it has been cast, by its form.
+    params: { caster: creature, spell: spell, level: int, target: creature }
+    do:
+      - let: { extra: "max(0, level - spell.level)" }
+      - if: "spell.form == 'attack'"
+        then:
+          - each: ray
+            in: "range(spell.count + spell.countPerLevel * extra)"
+            do:
+              - if: "!target.defeated"
+                then:
+                  - call: attackRoll
+                    with: { attacker: caster, target: target, bonus: caster.spellAttack, ranged: "spell.range > 5", normalRange: spell.range }
+                    as: { hit: hit, critical: critical }
+                  - if: hit
+                    then:
+                      - roll: { as: damage, n: "(spell.dice + spell.dicePerLevel * extra) * (critical ? 2 : 1)", d: spell.die }
+                      - call: harm
+                        with: { target: target, amount: "damage + spell.flat", damageType: spell.damageType }
+                      - call: afflict
+                        with: { caster: caster, spell: spell, target: target }
+      - if: "spell.form == 'save'"
+        then:
+          - call: savingThrow
+            with: { creature: target, ability: spell.save, dc: caster.spellDc }
+            as: { saved: saved }
+          - if: "spell.dice > 0"
+            then:
+              - roll: { as: damage, n: "spell.dice + spell.dicePerLevel * extra", d: spell.die }
+              - call: harm
+                with:
+                  target: target
+                  amount: "saved ? (spell.half ? floorDiv(damage + spell.flat, 2) : 0) : damage + spell.flat"
+                  damageType: spell.damageType
+          - if: "!saved"
+            then:
+              - call: afflict
+                with: { caster: caster, spell: spell, target: target }
+      - if: "spell.form == 'darts'"
+        then:
+          # Darts cannot miss, but a warding spell stops them all.
+          - if: "target.wardReady"
+            then:
+              - prompt:
+                  seat: target.seat
+                  with: { actor: target, total: 0 }
+                  offer: [ward]
+          - if: "!target.shielded"
+            then:
+              - let: { darts: "spell.count + spell.countPerLevel * extra" }
+              - roll: { as: damage, n: "darts * spell.dice", d: spell.die }
+              - call: harm
+                with: { target: target, amount: "damage + darts * spell.flat", damageType: spell.damageType }
+      - if: "spell.form == 'heal'"
+        then:
+          - roll: { as: healed, n: "spell.dice + spell.dicePerLevel * extra", d: spell.die }
+          - emit: hp.gain
+            with: { target: target, amount: "healed + spell.flat + (spell.addsModifier ? max(0, caster.mod[caster.castingAbility]) : 0)" }
+
 intents:
   move:
-    doc: Move one square. Leaving an enemy's reach gives it an Opportunity Attack first.
+    doc: Move one square. Leaving an enemy's reach gives it an Opportunity Attack first, unless the mover has Disengaged.
     params:
       actor: creature
       to: { type: cell, in: "neighbors(actor.pos)" }
     gate:
+      - "actor.able && !actor.prone"
       - "actor.movement >= 5"
       - "!all.creature.exists(c, !c.defeated && c.pos == to)"
     effects:
       - each: foe
         in: >-
-          all.creature.filter(c, c.side != actor.side && !c.defeated && c.reaction > 0 && c.reach > 0
+          all.creature.filter(c, !actor.disengaged && c.side != actor.side && c.able && c.reaction > 0 && c.reach > 0
             && distance(c.pos, actor.pos) <= c.reach && distance(c.pos, to) > c.reach)
         do:
           - if: "!actor.defeated"
@@ -197,7 +575,7 @@ intents:
     doc: Attack with a wielded weapon. The first attack of a turn spends the action.
     params:
       actor: creature
-      weapon: { type: weapon, in: actor.wields }
+      weapon: { type: weapon, in: "actor.wields.filter(w, actor.able)" }
       target: { type: creature, in: "all.creature.filter(c, c.side != actor.side && !c.defeated)" }
     gate:
       - "actor.attacksLeft > 0 || actor.action > 0"
@@ -211,15 +589,127 @@ intents:
       - call: strike
         with: { attacker: actor, weapon: weapon, target: target }
 
+  cast:
+    doc: >-
+      Cast a spell at one creature: a spell attack, a spell it must save
+      against, darts that cannot miss, or healing for an ally. A slot above
+      the spell's level makes it stronger.
+    params:
+      actor: creature
+      spell:
+        type: spell
+        in: >-
+          actor.knows.filter(s, actor.able && s.form in ['attack', 'save', 'darts', 'heal']
+            && (s.time == 'bonus' ? actor.bonus > 0 : s.time == 'action' && actor.action > 0))
+      slot: { type: int, in: "spell.level == 0 ? [0] : actor.slotLevels.filter(l, l >= spell.level && !actor.slotSpent)" }
+      target: { type: creature, in: "all.creature.filter(c, !c.defeated && (c.side == actor.side) == (spell.form == 'heal'))" }
+    gate:
+      - "distance(actor.pos, target.pos) <= spell.range"
+      - "lineOfSight(actor.pos, target.pos)"
+    effects:
+      - call: spend
+        with: { caster: actor, spell: spell }
+      - call: declare
+        with: { caster: actor, spell: spell, level: slot }
+        as: { works: works }
+      - if: works
+        then:
+          - call: resolveSpell
+            with: { caster: actor, spell: spell, level: slot, target: target }
+
+  castAt:
+    doc: Cast a burst at a point. Everyone within its radius saves against it, friend and foe.
+    params:
+      actor: creature
+      spell:
+        type: spell
+        in: >-
+          actor.knows.filter(s, actor.able && s.form == 'burst'
+            && (s.time == 'bonus' ? actor.bonus > 0 : s.time == 'action' && actor.action > 0))
+      slot: { type: int, in: "spell.level == 0 ? [0] : actor.slotLevels.filter(l, l >= spell.level && !actor.slotSpent)" }
+      at:
+        type: cell
+        in: "cellsWithin(actor.pos, spell.range).filter(p, all.creature.exists(c, !c.defeated && distance(p, c.pos) <= spell.radius))"
+    gate: "lineOfSight(actor.pos, at)"
+    effects:
+      - call: spend
+        with: { caster: actor, spell: spell }
+      - call: declare
+        with: { caster: actor, spell: spell, level: slot }
+        as: { works: works }
+      - if: works
+        then:
+          # One damage roll for everyone caught.
+          - roll: { as: damage, n: "spell.dice + spell.dicePerLevel * max(0, slot - spell.level)", d: spell.die }
+          - each: caught
+            in: "all.creature.filter(c, !c.defeated && distance(at, c.pos) <= spell.radius)"
+            do:
+              - call: savingThrow
+                with: { creature: caught, ability: spell.save, dc: actor.spellDc }
+                as: { saved: saved }
+              - call: harm
+                with:
+                  target: caught
+                  amount: "saved ? (spell.half ? floorDiv(damage + spell.flat, 2) : 0) : damage + spell.flat"
+                  damageType: spell.damageType
+
+  castStep:
+    doc: Cast a spell that teleports the caster to an empty square it can see, such as Misty Step. It takes the lowest slot that will do.
+    params:
+      actor: creature
+      spell:
+        type: spell
+        in: >-
+          actor.knows.filter(s, actor.able && s.form == 'step'
+            && (s.time == 'bonus' ? actor.bonus > 0 : s.time == 'action' && actor.action > 0))
+      slot: { type: int, in: "cel.bind(levels, actor.slotLevels.filter(l, l >= spell.level && !actor.slotSpent), levels.size() > 0 ? [levels.min()] : levels)" }
+      to: { type: cell, in: "cellsWithin(actor.pos, spell.range).filter(p, !all.creature.exists(c, !c.defeated && c.pos == p))" }
+    gate: "lineOfSight(actor.pos, to)"
+    effects:
+      - call: spend
+        with: { caster: actor, spell: spell }
+      - call: declare
+        with: { caster: actor, spell: spell, level: slot }
+        as: { works: works }
+      - if: works
+        then:
+          - set: { actor.pos: to }
+
   dash:
     doc: Spend the action for extra movement equal to Speed.
     params: { actor: creature }
-    gate: "actor.action > 0"
+    gate: "actor.able && actor.action > 0"
     effects:
-      - set: { actor.action: "actor.action - 1", actor.movement: "actor.movement + actor.speed" }
+      - set: { actor.action: "actor.action - 1", actor.movement: "actor.movement + max(0, actor.speedNow)" }
+
+  disengage:
+    doc: Spend the action so that movement provokes no Opportunity Attacks this turn.
+    params: { actor: creature }
+    gate: "actor.able && actor.action > 0 && !actor.disengaged"
+    effects:
+      - set: { actor.action: "actor.action - 1", actor.disengaged: true }
+
+  nimbleEscape:
+    doc: Disengage as a Bonus Action.
+    params: { actor: creature }
+    gate: "actor.able && actor.nimbleEscape && actor.bonus > 0 && !actor.disengaged"
+    effects:
+      - set: { actor.bonus: "actor.bonus - 1", actor.disengaged: true }
+
+  standUp:
+    doc: End the Prone condition, for half of Speed.
+    params: { actor: creature }
+    gate: "actor.able && actor.prone && actor.movement >= ceilDiv(actor.speed, 2)"
+    effects:
+      - each: down
+        in: "actor.effects.filter(e, e.condition == 'prone')"
+        do:
+          - destroy: down
+      - set: { actor.movement: "actor.movement - ceilDiv(actor.speed, 2)" }
 
   endTurn:
     params: { actor: creature }
+    gate: "!actor.defeated"
     effects:
       - done: true
 
@@ -229,20 +719,73 @@ intents:
       actor: creature
       target: creature
       weapon: { type: weapon, in: "actor.wields.filter(w, !w.ranged)" }
-    gate: "actor.reaction > 0"
+    gate: "actor.able && actor.reaction > 0"
     effects:
       - set: { actor.reaction: "actor.reaction - 1" }
       - call: strike
         with: { attacker: actor, weapon: weapon, target: target }
 
+  castWard:
+    doc: >-
+      A reaction to being hit - cast a warding spell such as Shield, for +5
+      to Armor Class until the caster's next turn. `total` is the attack roll
+      that hit, or 0 for something that cannot miss. It takes the lowest slot
+      that will do.
+    params:
+      actor: creature
+      total: int
+      spell: { type: spell, in: "actor.knows.filter(s, s.form == 'ward')" }
+      slot: { type: int, in: "cel.bind(levels, actor.slotLevels.filter(l, l >= spell.level), levels.size() > 0 ? [levels.min()] : levels)" }
+    gate: "actor.wardReady"
+    effects:
+      - set: { actor.reaction: "actor.reaction - 1" }
+      - call: declare
+        with: { caster: actor, spell: spell, level: slot }
+        as: { works: works }
+      - if: works
+        then:
+          - create: { kind: effect, as: ward, fields: { condition: "'shielded'", source: actor, ends: "'sourceTurnStart'", acBonus: 5 } }
+          - link: { rel: affects, from: ward, to: actor }
+
+  counterspell:
+    doc: >-
+      A reaction to a spell being cast - the caster makes a saving throw, and
+      on a failure the spell comes to nothing. It takes the lowest slot that
+      will do.
+    params:
+      actor: creature
+      casting: casting
+      spell: { type: spell, in: "actor.knows.filter(s, s.form == 'counter')" }
+      slot: { type: int, in: "cel.bind(levels, actor.slotLevels.filter(l, l >= spell.level), levels.size() > 0 ? [levels.min()] : levels)" }
+    gate:
+      - "actor.able && actor.reaction > 0 && !actor.slotSpent"
+      - "distance(actor.pos, casting.caster.pos) <= spell.range"
+    effects:
+      - set: { actor.reaction: "actor.reaction - 1" }
+      - call: declare
+        with: { caster: actor, spell: spell, level: slot }
+        as: { works: works }
+      - if: works
+        then:
+          - call: savingThrow
+            with: { creature: casting.caster, ability: spell.save, dc: actor.spellDc }
+            as: { saved: saved }
+          - if: "!saved"
+            then:
+              - set: { casting.countered: true }
+              - emit: spell.countered
+                with: { casting: casting }
+
   holdReaction:
-    doc: Let the creature go.
+    doc: Let it pass.
     params: { actor: creature }
     effects: []
 
 menus:
-  turn: [attack, move, dash, endTurn]
+  turn: [attack, cast, castAt, castStep, move, dash, disengage, nimbleEscape, standUp, endTurn]
   reaction: [opportunityAttack, holdReaction]
+  ward: [castWard, holdReaction]
+  counter: [counterspell, holdReaction]
 
 flow:
   # Initiative: a Dexterity check each, highest first, ties to the higher Dexterity.
@@ -250,7 +793,8 @@ flow:
     in: all.creature
     do:
       - roll: { as: d20, d: 20 }
-      - set: { combatant.initiative: "d20 + combatant.mod['dex']" }
+      # Nobody is surprised: a reaction is ready before a creature's first turn.
+      - set: { combatant.initiative: "d20 + combatant.mod['dex']", combatant.reaction: combatant.reactionMax }
   - while: true
     do:
       - set: { game.round: "game.round + 1" }
@@ -261,13 +805,18 @@ flow:
             then:
               - emit: turn.start
                 with: { actor: actor }
-              - prompt:
-                  seat: actor.seat
-                  with: { actor: actor }
-                  offer: [turn]
-                  repeat: true
-              - emit: turn.end
-                with: { actor: actor }
+              # An incapacitated creature has a turn, but nothing to do with it.
+              - if: actor.able
+                then:
+                  - prompt:
+                      seat: actor.seat
+                      with: { actor: actor }
+                      offer: [turn]
+                      repeat: true
+              - if: "!actor.defeated"
+                then:
+                  - emit: turn.end
+                    with: { actor: actor }
 
 behaviors:
   hunter:
@@ -275,6 +824,7 @@ behaviors:
     scores:
       attack: 100
       opportunityAttack: 100
+      standUp: 150
       move: >-
         cel.bind(foes, all.creature.filter(c, c.side != actor.side && !c.defeated),
           foes.map(c, distance(actor.pos, c.pos)).min() <= actor.reach
@@ -283,6 +833,7 @@ behaviors:
       dash: >-
         actor.movement == 0 && !all.creature.exists(c, c.side != actor.side && !c.defeated
           && distance(actor.pos, c.pos) <= actor.reach) ? 30 : -1
+      disengage: -1
       endTurn: 0
       holdReaction: 0
 
@@ -291,19 +842,199 @@ behaviors:
     scores:
       attack: >-
         !weapon.ranged ? 80
-          : all.creature.exists(c, c.side != actor.side && !c.defeated && distance(c.pos, actor.pos) <= 5) ? 40
+          : actor.threatened ? 40
           : distance(actor.pos, target.pos) > weapon.range ? 60
           : 100
       opportunityAttack: 90
+      standUp: 150
+      # Backs away from anything close. With no shot from here, steps to where there is one.
       move: >-
         cel.bind(foes, all.creature.filter(c, c.side != actor.side && !c.defeated),
-          foes.map(c, distance(actor.pos, c.pos)).min() < 30
-            && foes.map(c, distance(to, c.pos)).min() > foes.map(c, distance(actor.pos, c.pos)).min()
-            ? 120 : -5)
+          cel.bind(near, foes.map(c, distance(actor.pos, c.pos)).min(),
+            cel.bind(next, foes.map(c, distance(to, c.pos)).min(),
+              near < 30 && next > near ? 120
+                : actor.wields.exists(w, foes.exists(c, distance(actor.pos, c.pos) <= w.maxRange && lineOfSight(actor.pos, c.pos))) ? -5
+                : actor.wields.exists(w, foes.exists(c, distance(to, c.pos) <= w.maxRange && lineOfSight(to, c.pos))) ? 60
+                : (near - next) * 2)))
       dash: -1
+      disengage: -1
       endTurn: 1
       holdReaction: 0
     goals:
       - name: stand and fight
         when: "actor.hp * 2 <= actor.hpMax"
         scale: { move: 0 }
+
+  packHunter:
+    doc: >-
+      Hunts as a pack. Goes for whoever is down, marked, or already hurt, and
+      closes on the weakest prey within reach of a run. Breaks off when badly
+      hurt and outnumbered.
+    scores:
+      attack: "100 + (target.prone ? 30 : 0) + (target.exposures.size() > 0 ? 15 : 0) + 30 - floorDiv(30 * target.hp, target.hpMax)"
+      opportunityAttack: 100
+      standUp: 150
+      # Towards the prey: the enemy that is close and has few hit points left.
+      # With no way closer and nobody in reach, it circles to look for an opening.
+      move: >-
+        cel.bind(foes, all.creature.filter(c, c.side != actor.side && !c.defeated),
+          cel.bind(prey, sortBy(foes, foes.map(c, distance(actor.pos, c.pos) + c.hp)).first(),
+            cel.bind(closer, distance(actor.pos, prey.pos) - distance(to, prey.pos),
+              foes.exists(c, distance(actor.pos, c.pos) <= actor.reach) ? closer * 2 - 3
+                : closer == 0 ? 2
+                : closer * 2)))
+      dash: >-
+        actor.movement == 0 && !all.creature.exists(c, c.side != actor.side && !c.defeated
+          && distance(actor.pos, c.pos) <= actor.reach) ? 30 : -1
+      disengage: -1
+      endTurn: 1
+      holdReaction: 0
+    goals:
+      - name: break off
+        when: >-
+          actor.hp * 4 <= actor.hpMax
+            && all.creature.filter(c, c.side == actor.side && !c.defeated).size()
+              < all.creature.filter(c, c.side != actor.side && !c.defeated).size()
+        scale: { attack: 0, move: -1 }
+
+  sniper:
+    doc: >-
+      Shoots from a distance and favours a target it has an edge on. When an
+      enemy closes in, it slips away if it can and fights hand to hand if it
+      cannot.
+    scores:
+      attack: >-
+        (weapon.ranged ? (actor.threatened ? 40 : 100) : 70)
+          + (target.prone && distance(actor.pos, target.pos) <= 5 ? 20 : 0)
+          + (target.exposures.size() > 0 ? 20 : 0)
+          + 20 - floorDiv(20 * target.hp, target.hpMax)
+      opportunityAttack: 90
+      standUp: 150
+      nimbleEscape: "actor.threatened ? 160 : -1"
+      move: >-
+        cel.bind(foes, all.creature.filter(c, c.side != actor.side && !c.defeated),
+          cel.bind(near, foes.map(c, distance(actor.pos, c.pos)).min(),
+            cel.bind(next, foes.map(c, distance(to, c.pos)).min(),
+              actor.threatened && !actor.disengaged ? -5
+                : near < 20 && next > near ? 150
+                : actor.wields.exists(w, foes.exists(c, distance(actor.pos, c.pos) <= w.maxRange && lineOfSight(actor.pos, c.pos))) ? -5
+                : actor.wields.exists(w, foes.exists(c, distance(to, c.pos) <= w.maxRange && lineOfSight(to, c.pos))) ? 60
+                : (near - next) * 2)))
+      dash: -1
+      disengage: -1
+      endTurn: 1
+      holdReaction: 0
+
+  defender:
+    doc: Holds the line. Fights whoever is closest, and will not stray far from the weakest ally.
+    scores:
+      attack: "(weapon.ranged ? 60 : 100) + 20 - floorDiv(20 * target.hp, target.hpMax)"
+      opportunityAttack: 100
+      standUp: 150
+      move: >-
+        cel.bind(foes, all.creature.filter(c, c.side != actor.side && !c.defeated),
+          cel.bind(near, foes.map(c, distance(actor.pos, c.pos)).min(),
+            near <= actor.reach ? -1 : (near - foes.map(c, distance(to, c.pos)).min()) * 2))
+      dash: -1
+      disengage: -1
+      endTurn: 1
+      holdReaction: 0
+    goals:
+      - name: stay by the weakest ally
+        when: >-
+          cel.bind(allies, all.creature.filter(c, c.side == actor.side && !c.defeated && c.id != actor.id),
+            allies.size() > 0 && cel.bind(charge, sortBy(allies, allies.map(c, c.hpMax)).first(),
+              distance(to, charge.pos) > 15 && distance(to, charge.pos) > distance(actor.pos, charge.pos)))
+        scale: { move: 0 }
+
+  medic:
+    doc: Heals an ally who is bloodied, the worse off the sooner. Otherwise harries the enemy from behind the line.
+    scores:
+      cast: >-
+        spell.form == 'heal'
+          ? (target.hp * 2 <= target.hpMax ? 200 - floorDiv(50 * target.hp, target.hpMax) : -1)
+          : 80 - floorDiv(20 * target.hp, target.hpMax)
+      attack: 40
+      opportunityAttack: 60
+      standUp: 150
+      move: >-
+        cel.bind(foes, all.creature.filter(c, c.side != actor.side && !c.defeated),
+          cel.bind(near, foes.map(c, distance(actor.pos, c.pos)).min(),
+            cel.bind(next, foes.map(c, distance(to, c.pos)).min(),
+              near < 20 && next > near ? 60
+                : foes.exists(c, distance(actor.pos, c.pos) <= 60 && lineOfSight(actor.pos, c.pos)) ? -5
+                : foes.exists(c, distance(to, c.pos) <= 60 && lineOfSight(to, c.pos)) ? 40
+                : (near - next) * 2)))
+      dash: -1
+      disengage: -1
+      endTurn: 1
+      holdReaction: 0
+
+  # Both spellcasters value a spell the same way: by the damage it should do,
+  # in tenths of a hit point, less what the slot is worth. Resistance halves
+  # it, and darts are worth little against a caster who can still ward.
+  artillery:
+    doc: Fights from long range, out of reach of a counterspell, and picks the spell that should hurt most.
+    scores:
+      cast: &spellValue >-
+        cel.bind(extra, max(0, slot - spell.level),
+          cel.bind(each, (spell.dice + spell.dicePerLevel * extra) * (spell.die + 1) * 5 + spell.flat * 10,
+            cel.bind(shots, spell.count + spell.countPerLevel * extra,
+              cel.bind(weak, spell.damageType in target.resists ? 2 : 1,
+                spell.form == 'heal' ? (target.hp * 2 <= target.hpMax ? 600 : -10)
+                : spell.form == 'darts' ? 200 - slot * 10 + floorDiv(each * shots, weak * (target.wardReady ? 4 : 1))
+                : spell.form == 'attack' ? 200 - slot * 10 + floorDiv(each * shots * (target.incapacitated ? 9 : 6), 10 * weak)
+                : 200 - slot * 10 + floorDiv(each, weak)
+                  + (spell.applies != 'paralyzed' ? 0 : target.paralyzed || actor.concentrating ? -500 : 250)))))
+      castAt: &burstValue >-
+        cel.bind(each, (spell.dice + spell.dicePerLevel * max(0, slot - spell.level)) * (spell.die + 1) * 5,
+          200 - slot * 10 + all.creature.filter(c, !c.defeated && distance(at, c.pos) <= spell.radius)
+            .map(c, (c.side == actor.side ? -2 : 1) * floorDiv(each, spell.damageType in c.resists ? 2 : 1)).sum())
+      castStep: &escapeValue >-
+        actor.threatened && all.creature.filter(c, c.side != actor.side && !c.defeated)
+          .all(c, distance(to, c.pos) >= 30) ? 500 : -1
+      castWard: &wardValue "total == 0 || total < actor.armorClass + 5 ? 300 : -1"
+      counterspell: &counterValue "casting.level >= 2 ? 300 + casting.level * 50 : -1"
+      attack: &bladeValue "target.incapacitated ? 450 : 30"
+      opportunityAttack: 60
+      standUp: 600
+      # Gets more than 60 feet away before casting, and stays within 120.
+      move: >-
+        cel.bind(foes, all.creature.filter(c, c.side != actor.side && !c.defeated),
+          cel.bind(near, foes.map(c, distance(actor.pos, c.pos)).min(),
+            cel.bind(next, foes.map(c, distance(to, c.pos)).min(),
+              near <= 60 && next > near ? 700 : near > 120 && next < near ? 700 : -5)))
+      dash: -1
+      disengage: -1
+      endTurn: 1
+      holdReaction: 0
+
+  controller:
+    doc: Closes to 60 feet, where its spells reach and it can counter, pins the enemy down, and then burns it.
+    scores:
+      cast: *spellValue
+      castAt: *burstValue
+      # Steps in when the enemy is out of reach, and out when it is too close.
+      castStep: >-
+        cel.bind(foes, all.creature.filter(c, c.side != actor.side && !c.defeated),
+          actor.threatened ? (foes.all(c, distance(to, c.pos) >= 30) ? 500 : -1)
+            : foes.map(c, distance(actor.pos, c.pos)).min() > 90 && foes.map(c, distance(to, c.pos)).min() <= 60 ? 430 : -1)
+      castWard: *wardValue
+      counterspell: *counterValue
+      attack: *bladeValue
+      opportunityAttack: 60
+      standUp: 600
+      move: >-
+        cel.bind(foes, all.creature.filter(c, c.side != actor.side && !c.defeated),
+          cel.bind(near, foes.map(c, distance(actor.pos, c.pos)).min(),
+            near > 60 ? (near - foes.map(c, distance(to, c.pos)).min()) * 140
+              : foes.exists(c, c.incapacitated) && near > 5 ? (near - foes.map(c, distance(to, c.pos)).min()) * 140
+              : -5))
+      dash: -1
+      disengage: -1
+      endTurn: 1
+      holdReaction: 0
+    goals:
+      - name: pin them down first
+        when: "spell.applies == 'paralyzed' && !target.paralyzed && !actor.concentrating"
+        scale: { cast: 1.5 }

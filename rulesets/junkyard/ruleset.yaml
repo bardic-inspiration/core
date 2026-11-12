@@ -1,0 +1,240 @@
+# A sandbox of self-assembling bots. A bot is a bare frame; what it can do
+# comes from the parts mounted on it. Legs let it move, arms let it strike,
+# plates protect it, cells store charge, and panels make charge. Bots take
+# parts from piles of scrap, build new bots out of their own parts, and break
+# each other back down into scrap.
+#
+# This is the open game: state grows and shrinks during play, the ruleset
+# declares no winner, and time is ticks, not turns. A scenario may still
+# declare an end, such as a census after so many ticks.
+format: 1
+ruleset: { id: junkyard, version: 0.1.0, title: Junkyard }
+
+# A layer may add kinds of part, things to do, and ways to behave.
+open:
+  - enums.partType.+
+  - tables.+
+  - intents.+
+  - menus.*.+
+  - behaviors.+
+  - behaviors.*.scores.+
+
+uses:
+  - pattern: slots
+    with: { relation: mounts, holder: bot, item: part, inverse: mountedOn, capacity: self.sockets }
+  # What a bot can do is the sum of its parts.
+  - pattern: stacking
+    with: { kind: bot, name: power, base: 0, source: "self.mounts.filter(p, p.type == 'arm').map(p, p.rating)", rule: sum }
+  - pattern: stacking
+    with: { kind: bot, name: mobility, base: 0, source: "self.mounts.filter(p, p.type == 'leg').map(p, p.rating)", rule: sum }
+  - pattern: stacking
+    with: { kind: bot, name: solar, base: 0, source: "self.mounts.filter(p, p.type == 'panel').map(p, p.rating)", rule: sum }
+  # Plates do not add up: only the thickest counts.
+  - pattern: stacking
+    with: { kind: bot, name: armor, base: 0, source: "self.mounts.filter(p, p.type == 'plate').map(p, p.rating)", rule: max }
+  - pattern: pool
+    with: { kind: bot, name: hull, max: self.frame }
+  - pattern: pool
+    with: { kind: bot, name: charge, max: "2 + 2 * self.mounts.filter(p, p.type == 'cell').map(p, p.rating).sum()" }
+
+enums:
+  partType: [arm, leg, plate, cell, panel]
+
+tables:
+  # What falls into the yard, in the order a die picks it.
+  scrap: [arm, leg, leg, plate, cell, panel]
+
+space: { grid: square, adjacency: 8 }
+
+globals:
+  tick: { type: int, default: 0 }
+  dropEvery: { type: int, default: 5, doc: "A part falls into the yard every this many ticks. 0 for never." }
+  swarmLimit: { type: int, default: 6, doc: The most bots one seat may run. }
+
+kinds:
+  bot:
+    fields:
+      seat: seat
+      pos: cell
+      sockets: { type: int, default: 4 }
+      frame: { type: int, default: 3, doc: How much damage the hull takes before the bot is a wreck. }
+      born: { type: int, default: 0, doc: The tick it was assembled on. }
+    derived:
+      free: { type: int, doc: Empty sockets., value: "self.sockets - self.mounts.size()" }
+    checks:
+      - { that: "inBounds(self.pos)", message: a bot stands in the yard }
+      - { that: "all.bot.filter(b, b.pos == self.pos).size() == 1", message: two bots cannot share a square }
+
+  part:
+    fields:
+      type: partType
+      rating: { type: int, default: 1 }
+    checks:
+      - { that: "self.rating >= 1 && self.rating <= 3", message: a part is rated from 1 to 3 }
+      - { that: "self.mountedOn.size() + self.heldIn.size() <= 1", message: a part is in one place at a time }
+
+  pile:
+    doc: Scrap on the ground. It lasts as long as it holds a part.
+    fields:
+      pos: cell
+    checks:
+      - { that: "inBounds(self.pos)", message: a pile lies in the yard }
+
+relations:
+  holds: { from: pile, to: part, inverse: heldIn }
+
+signals:
+  bot.built: { params: { parent: bot, child: bot } }
+  bot.wrecked: { params: { bot: bot } }
+
+reactions:
+  - on: hull.empty
+    doc: A wrecked bot falls apart where it stands. Its parts become a pile.
+    do:
+      - emit: bot.wrecked
+        with: { bot: target }
+      - if: "target.mounts.size() > 0"
+        then:
+          - create: { kind: pile, as: wreck, fields: { pos: target.pos } }
+          - each: part
+            in: target.mounts
+            do:
+              - unlink: { rel: mounts, from: target, to: part }
+              - link: { rel: holds, from: wreck, to: part }
+      - destroy: target
+
+intents:
+  move:
+    doc: Step to a neighbouring square. Needs legs, and a point of charge.
+    params:
+      bot: bot
+      to: { type: cell, in: "neighbors(bot.pos)" }
+    gate:
+      - "bot.mobility > 0 && bot.charge >= 1"
+      - "!all.bot.exists(b, b.pos == to)"
+    effects:
+      - emit: charge.lose
+        with: { target: bot, amount: 1 }
+      - set: { bot.pos: to }
+
+  salvage:
+    doc: Take a part from a pile here or on a neighbouring square, and mount it.
+    params:
+      bot: bot
+      part: { type: part, in: "all.part.filter(x, bot.free > 0 && x.heldIn.exists(p, distance(p.pos, bot.pos) <= 1))" }
+    effects:
+      - each: pile
+        in: part.heldIn
+        do:
+          - unlink: { rel: holds, from: pile, to: part }
+          - if: "pile.holds.size() == 0"
+            then:
+              - destroy: pile
+      - link: { rel: mounts, from: bot, to: part }
+
+  strike:
+    doc: Hit a neighbouring bot of another seat. Needs arms, and two points of charge. Armor makes it harder to hurt.
+    params:
+      bot: bot
+      target: { type: bot, in: "all.bot.filter(b, bot.power > 0 && b.seat != bot.seat && distance(b.pos, bot.pos) <= 1)" }
+    gate: "bot.charge >= 2"
+    effects:
+      - emit: charge.lose
+        with: { target: bot, amount: 2 }
+      - roll: { as: swing, d: 6 }
+      - if: "swing + bot.power > 3 + target.armor"
+        then:
+          - emit: hull.lose
+            with: { target: target, amount: "max(1, bot.power - target.armor)" }
+
+  assemble:
+    doc: >-
+      Build a new bot on an empty neighbouring square, out of one of this
+      bot's own parts. Takes two points of charge, and the builder keeps at
+      least two parts.
+    params:
+      bot: bot
+      part: { type: part, in: "bot.mounts.filter(p, bot.mounts.size() >= 3 && bot.charge >= 2)" }
+      to: { type: cell, in: "neighbors(bot.pos)" }
+    gate:
+      - "all.bot.filter(b, b.seat == bot.seat).size() < game.swarmLimit"
+      - "!all.bot.exists(b, b.pos == to)"
+    effects:
+      - emit: charge.lose
+        with: { target: bot, amount: 2 }
+      - unlink: { rel: mounts, from: bot, to: part }
+      # Giving away a cell shrinks what the builder can hold.
+      - set: { bot.charge: "min(bot.charge, bot.chargeMax)" }
+      - create: { kind: bot, as: child, fields: { seat: bot.seat, pos: to, born: game.tick } }
+      - link: { rel: mounts, from: child, to: part }
+      - emit: bot.built
+        with: { parent: bot, child: child }
+
+  idle:
+    params: { bot: bot }
+    effects: []
+
+menus:
+  act: [salvage, assemble, strike, move, idle]
+
+flow:
+  - while: true
+    do:
+      - set: { game.tick: "game.tick + 1" }
+      # Scrap falls somewhere in the yard.
+      - if: "game.dropEvery > 0 && game.tick % game.dropEvery == 0"
+        then:
+          - roll: { as: x, d: space.width }
+          - roll: { as: y, d: space.height }
+          - roll: { as: what, d: "tables.scrap.size()" }
+          - roll: { as: rating, d: 3 }
+          - if: "inBounds(cell(x - 1, y - 1))"
+            then:
+              - create: { kind: pile, as: heap, fields: { pos: "cell(x - 1, y - 1)" } }
+              - create: { kind: part, as: scrap, fields: { type: "tables.scrap[what - 1]", rating: rating } }
+              - link: { rel: holds, from: heap, to: scrap }
+      # Every bot acts once a tick, the quickest first. A bot built this tick waits for the next.
+      - each: bot
+        in: "sortBy(all.bot, all.bot.map(b, -b.mobility))"
+        do:
+          - emit: charge.gain
+            with: { target: bot, amount: "1 + bot.solar" }
+          - prompt:
+              seat: bot.seat
+              with: { bot: bot }
+              offer: [act]
+
+behaviors:
+  forager:
+    doc: Gathers parts and multiplies. Fights only what stands next to it when there is nothing better to do.
+    scores:
+      salvage: "20 + part.rating + (part.type == 'leg' && bot.mobility == 0 ? 10 : 0)"
+      # Splits when full, and never gives away its last leg.
+      assemble: >-
+        bot.free > 0 ? -1
+          : part.type == 'leg' && bot.mounts.filter(p, p.type == 'leg').size() == 1 ? -1
+          : 12 - part.rating
+      strike: 3
+      move: >-
+        all.pile.size() == 0 ? 0
+          : (all.pile.map(p, distance(bot.pos, p.pos)).min() - all.pile.map(p, distance(to, p.pos)).min()) * 5
+      idle: 1
+
+  raider:
+    doc: Arms itself, hunts the bots of other seats, and picks over what is left of them.
+    scores:
+      strike: "30 + (target.hull == 1 ? 10 : 0) - target.armor"
+      salvage: "20 + part.rating + (part.type == 'arm' && bot.power == 0 ? 10 : 0)"
+      assemble: >-
+        bot.free > 0 ? -1
+          : part.type == 'leg' && bot.mounts.filter(p, p.type == 'leg').size() == 1 ? -1
+          : part.type == 'arm' && bot.mounts.filter(p, p.type == 'arm').size() == 1 ? -1
+          : 12 - part.rating
+      # Armed, it closes on the nearest bot of another seat. Unarmed, it looks for scrap.
+      move: >-
+        cel.bind(prey, all.bot.filter(b, b.seat != bot.seat),
+          bot.power > 0 && prey.size() > 0
+            ? (prey.map(b, distance(bot.pos, b.pos)).min() - prey.map(b, distance(to, b.pos)).min()) * 5
+          : all.pile.size() == 0 ? 0
+          : (all.pile.map(p, distance(bot.pos, p.pos)).min() - all.pile.map(p, distance(to, p.pos)).min()) * 5)
+      idle: 1

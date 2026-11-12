@@ -8,7 +8,9 @@
   "scripts": {
     "test": "tsc --noEmit && vitest run",
     "typecheck": "tsc --noEmit",
-    "play": "node --experimental-strip-types --no-warnings scripts/play.ts"
+    "validate": "tsc --noEmit && node --experimental-strip-types --no-warnings scripts/validate.ts && vitest run",
+    "play": "node --experimental-strip-types --no-warnings scripts/play.ts",
+    "sim": "node --experimental-strip-types --no-warnings scripts/sim.ts"
   },
   "dependencies": {
     "@marcbachmann/cel-js": "^8.0.0",

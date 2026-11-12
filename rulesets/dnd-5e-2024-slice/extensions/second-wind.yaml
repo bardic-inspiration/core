@@ -3,7 +3,7 @@
 # open. It could not change how the base derives or resolves anything.
 format: 1
 extension: { id: second-wind, version: 0.1.0, title: Second Wind for everyone }
-extends: { id: dnd-5e-2024-slice, version: 0.1.0 }
+extends: { id: dnd-5e-2024-slice, version: 0.2.0 }
 
 kinds:
   creature:

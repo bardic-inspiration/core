@@ -1,6 +1,6 @@
-// Signs of success 2 and 3: both rulesets run to an end state with every seat
+// Signs of success 2 and 3: every ruleset runs to an end state with every seat
 // filled by an AI; the same seed gives the same log; replay gives the same
-// final state. The two rulesets share no code: each is a YAML file.
+// final state. The rulesets share no code: each is a YAML file.
 
 import { describe, expect, it } from 'vitest';
 import { fold, Match, ReplaySeat, type Seat } from '../src/index.ts';
@@ -10,6 +10,10 @@ import { aiSeats, play } from './helpers.ts';
 const games = [
   { name: 'checkers', ruleset: 'checkers', scenario: 'standard', results: ['win', 'draw'] },
   { name: 'worg against scout (5e)', ruleset: 'dnd-5e-2024-slice', scenario: 'worg-vs-scout', results: ['win'] },
+  { name: 'pack ambush (5e, seven seats)', ruleset: 'dnd-5e-2024-slice', scenario: 'pack-ambush', results: ['win', 'draw'] },
+  { name: 'mage duel (5e, reactions)', ruleset: 'dnd-5e-2024-slice', scenario: 'mage-duel', results: ['win', 'draw'] },
+  { name: 'hold \'em (hidden cards)', ruleset: 'holdem', scenario: 'four-handed', results: ['win', 'time'] },
+  { name: 'junkyard (ticks, no winner)', ruleset: 'junkyard', scenario: 'yard', results: ['census'] },
 ];
 const seeds = [1, 2, 3, 4, 5, 6, 7, 8];
 
@@ -71,7 +75,7 @@ describe.each(games)('$name', ({ ruleset, scenario: scenarioName, results }) => 
         let taken = 0;
         for (let decision = match.advance(); decision && taken < limit; decision = match.advance(), taken++) {
           match.submit(seat[decision.seat].choose({
-            seat: decision.seat, options: decision.options, state: match.state,
+            seat: decision.seat, options: decision.options, state: match.view(decision.seat),
             scores: (behavior) => match.scores(behavior, decision.seat, decision.options),
           }));
         }

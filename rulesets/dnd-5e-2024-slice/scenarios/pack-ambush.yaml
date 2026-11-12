@@ -1,0 +1,148 @@
+# A worg, three wolves, and two goblin archers fall on a patrol of four.
+# Ten creatures share seven seats: each adventurer has its own, the beasts
+# share one, the goblins share another, and a referee watches. The six
+# playing seats use five behaviors between them.
+#
+# Stat-block inputs follow SRD 5.2 (Worg, Wolf, Goblin Warrior, Tough,
+# Guard, Scout, Priest Acolyte), written from the published blocks
+# and not yet checked against ttrpg-library. The acolyte's healing is given
+# as two level 1 slots, where the stat block gives uses per day.
+format: 1
+scenario: { id: pack-ambush, title: Pack ambush }
+ruleset: { id: dnd-5e-2024-slice, version: 0.2.0 }
+
+seats:
+  vanguard: { behavior: defender }
+  sentry: { behavior: defender }
+  ranger: { behavior: skirmisher }
+  healer: { behavior: medic }
+  pack: { behavior: packHunter }
+  goblins: { behavior: sniper }
+  referee: { referee: true }
+
+space:
+  width: 26
+  height: 14
+  # Boulders that block movement and line of sight.
+  blocked: [[11, 3], [11, 4], [12, 9], [12, 10], [16, 6]]
+
+entities:
+  # The patrol.
+  - id: tough
+    kind: creature
+    fields:
+      { name: Tough, seat: vanguard, side: adventurers, size: medium, cr: "1/2", ac: 12, hitDice: 5, speed: 30,
+        ability: { str: 15, dex: 12, con: 14, int: 10, wis: 10, cha: 11 }, pos: [7, 6], packTactics: true }
+  - id: club
+    kind: weapon
+    fields: { name: Mace, ability: str, dice: 1, die: 6, damageType: bludgeoning }
+  - id: guard
+    kind: creature
+    fields:
+      { name: Guard, seat: sentry, side: adventurers, size: medium, cr: "1/8", ac: 16, hitDice: 2, speed: 30,
+        ability: { str: 13, dex: 12, con: 12, int: 10, wis: 11, cha: 10 }, pos: [7, 8] }
+  - id: spear
+    kind: weapon
+    fields: { name: Spear, ability: str, dice: 1, die: 6, damageType: piercing }
+  - id: scout
+    kind: creature
+    fields:
+      { name: Scout, seat: ranger, side: adventurers, size: medium, cr: "1/2", ac: 13, hitDice: 3, speed: 30,
+        ability: { str: 11, dex: 14, con: 12, int: 11, wis: 13, cha: 11 }, pos: [4, 5], attacksPerAction: 2 }
+  - id: shortsword
+    kind: weapon
+    fields: { name: Shortsword, ability: dex, dice: 1, die: 6, damageType: piercing }
+  - id: longbow
+    kind: weapon
+    fields: { name: Longbow, ability: dex, dice: 1, die: 8, damageType: piercing, ranged: true, range: 150, longRange: 600 }
+  - id: acolyte
+    kind: creature
+    fields:
+      { name: Priest Acolyte, seat: healer, side: adventurers, size: medium, cr: "1/4", ac: 13, hitDice: 2, speed: 30,
+        ability: { str: 14, dex: 10, con: 12, int: 10, wis: 14, cha: 11 }, pos: [5, 8],
+        castingAbility: wis, slots: { "1": 2 } }
+  - id: mace
+    kind: weapon
+    fields: { name: Mace, ability: str, dice: 1, die: 6, damageType: bludgeoning }
+  - id: sacred-flame
+    kind: spell
+    fields: { name: Sacred Flame, level: 0, form: save, range: 60, save: dex, dice: 1, die: 8, damageType: radiant }
+  - id: healing-word
+    kind: spell
+    fields: { name: Healing Word, level: 1, form: heal, time: bonus, range: 60, dice: 2, die: 4, dicePerLevel: 2, addsModifier: true }
+
+  # The pack.
+  - id: worg
+    kind: creature
+    fields:
+      { name: Worg, seat: pack, side: monsters, size: large, cr: "1/2", ac: 13, hitDice: 4, speed: 50,
+        ability: { str: 16, dex: 13, con: 13, int: 7, wis: 11, cha: 8 }, pos: [21, 7] }
+  - id: worg-bite
+    kind: weapon
+    fields: { name: Bite, ability: str, dice: 1, die: 8, damageType: piercing, exposes: true }
+  - id: wolf-a
+    kind: creature
+    fields:
+      { name: Wolf, seat: pack, side: monsters, size: medium, cr: "1/4", ac: 12, hitDice: 2, speed: 40,
+        ability: { str: 14, dex: 15, con: 12, int: 3, wis: 12, cha: 6 }, pos: [20, 4], packTactics: true }
+  - id: wolf-b
+    kind: creature
+    fields:
+      { name: Wolf, seat: pack, side: monsters, size: medium, cr: "1/4", ac: 12, hitDice: 2, speed: 40,
+        ability: { str: 14, dex: 15, con: 12, int: 3, wis: 12, cha: 6 }, pos: [20, 10], packTactics: true }
+  - id: wolf-c
+    kind: creature
+    fields:
+      { name: Wolf, seat: pack, side: monsters, size: medium, cr: "1/4", ac: 12, hitDice: 2, speed: 40,
+        ability: { str: 14, dex: 15, con: 12, int: 3, wis: 12, cha: 6 }, pos: [22, 6], packTactics: true }
+  - id: wolf-bite
+    kind: weapon
+    fields: { name: Bite, ability: dex, dice: 1, die: 6, damageType: piercing, knocksProne: true }
+
+  # The archers, on the flanks.
+  - id: goblin-a
+    kind: creature
+    fields:
+      { name: Goblin Warrior, seat: goblins, side: monsters, size: small, cr: "1/4", ac: 15, hitDice: 3, speed: 30,
+        ability: { str: 8, dex: 15, con: 10, int: 10, wis: 8, cha: 8 }, pos: [18, 1], nimbleEscape: true }
+  - id: goblin-b
+    kind: creature
+    fields:
+      { name: Goblin Warrior, seat: goblins, side: monsters, size: small, cr: "1/4", ac: 15, hitDice: 3, speed: 30,
+        ability: { str: 8, dex: 15, con: 10, int: 10, wis: 8, cha: 8 }, pos: [18, 12], nimbleEscape: true }
+  - id: scimitar
+    kind: weapon
+    fields: { name: Scimitar, ability: dex, dice: 1, die: 6, damageType: slashing, advantageDie: 4 }
+  - id: shortbow
+    kind: weapon
+    fields: { name: Shortbow, ability: dex, dice: 1, die: 6, damageType: piercing, ranged: true, range: 80, longRange: 320, advantageDie: 4 }
+
+links:
+  - { rel: wields, from: tough, to: club }
+  - { rel: wields, from: guard, to: spear }
+  - { rel: wields, from: scout, to: shortsword }
+  - { rel: wields, from: scout, to: longbow }
+  - { rel: wields, from: acolyte, to: mace }
+  - { rel: knows, from: acolyte, to: sacred-flame }
+  - { rel: knows, from: acolyte, to: healing-word }
+  - { rel: wields, from: worg, to: worg-bite }
+  - { rel: wields, from: wolf-a, to: wolf-bite }
+  - { rel: wields, from: wolf-b, to: wolf-bite }
+  - { rel: wields, from: wolf-c, to: wolf-bite }
+  - { rel: wields, from: goblin-a, to: scimitar }
+  - { rel: wields, from: goblin-a, to: shortbow }
+  - { rel: wields, from: goblin-b, to: scimitar }
+  - { rel: wields, from: goblin-b, to: shortbow }
+
+end:
+  - when: "!all.creature.exists(c, !c.defeated && all.creature.exists(d, !d.defeated && d.side != c.side))"
+    outcome:
+      result: "'win'"
+      winner: "all.creature.filter(c, !c.defeated).map(c, c.side).first()"
+      rounds: game.round
+      standing: "all.creature.filter(c, !c.defeated).size()"
+  # Nothing in the rules forces a fight to finish, so the scenario calls time.
+  - when: "game.round > 40"
+    outcome: { result: "'draw'", rounds: game.round, standing: "all.creature.filter(c, !c.defeated).size()" }
+
+limits: { maxDecisions: 6000 }

@@ -5,12 +5,12 @@
 // frame on the stack. The stack is plain data, so a match can be saved at any
 // decision and resumed.
 
-import { RuleError, type Compiled, type Fx, type IntentSpec, type Registry } from '../compile/program.ts';
+import { RuleError, type Compiled, type Fx, type IntentSpec, type Registry, type SetTarget } from '../compile/program.ts';
 import type { ValueType } from '../types.ts';
 import { instantiate } from './instantiate.ts';
 import { hashSeed, rollDice } from './rng.ts';
 import type { Scenario } from './scenario.ts';
-import { Session, dehydrate, invalid } from './session.ts';
+import { Session, dehydrate, invalid, viewOf } from './session.ts';
 import { apply, emptyState, type GameEvent, type Marker, type State, type Value, type Write } from './state.ts';
 
 interface Var {
@@ -63,6 +63,7 @@ export class Match {
   readonly log: GameEvent[] = [];
   private stack: Frame[] = [];
   private session: Session | null = null;
+  private readonly views = new Map<string, Session>();
   private pending: Decision | null = null;
   private decisions = 0;
   readonly seed: string;
@@ -105,9 +106,25 @@ export class Match {
     return Object.keys(this.state.entities).flatMap((id) => session.failedChecks(id).map((message) => `${id}: ${message}`));
   }
 
-  /** What `seat` may know. Every seat sees everything for now; hidden information will filter here (DECISIONS.md D12). */
-  view(_seat: string): State {
-    return this.state;
+  /** What `seat` may know: the state without the fields and globals hidden from it. A referee sees everything. */
+  view(seat: string): State {
+    if (this.scenario.doc.seats[seat]?.referee) return this.state;
+    return viewOf(this.registry, this.state, this.scenario.world, seat);
+  }
+
+  /**
+   * The session a seat's choices are worked out in. When the ruleset hides
+   * anything, legal intents and behavior scores are evaluated through the
+   * seat's own view, so reading what it cannot see is an error, not a leak.
+   */
+  private sessionFor(seat: string): Session {
+    if (!this.registry.secrets || this.scenario.doc.seats[seat]?.referee) return this.sessionNow();
+    let session = this.views.get(seat);
+    if (!session) {
+      session = new Session(this.registry, this.state, this.scenario.world, seat);
+      this.views.set(seat, session);
+    }
+    return session;
   }
 
   // ── Running ─────────────────────────────────────────────────────────────
@@ -213,15 +230,15 @@ export class Match {
   scores(behaviorName: string, seat: string, options: Option[]): number[] {
     const behavior = this.registry.behaviors.get(behaviorName);
     if (!behavior) throw new RuleError(`the ruleset declares no behavior "${behaviorName}"`);
-    const session = this.sessionNow();
+    const session = this.sessionFor(seat);
     return options.map((option) => {
       const score = behavior.scores.get(option.intent);
       if (!score) return 0;
-      const vars = this.intentVars(this.registry.intents.get(option.intent)!, seat, option.params);
-      let value = Number(session.eval(score, this.hydrated(vars)));
+      const vars = this.hydrated(this.intentVars(this.registry.intents.get(option.intent)!, seat, option.params), session);
+      let value = Number(session.eval(score, vars));
       for (const goal of behavior.goals) {
         const scale = goal.scale.get(option.intent);
-        if (scale && session.eval(scale.when, this.hydrated(vars)) === true) value *= scale.factor;
+        if (scale && session.eval(scale.when, vars) === true) value *= scale.factor;
       }
       return value;
     });
@@ -317,6 +334,7 @@ export class Match {
     this.state = apply(this.state, entry);
     this.log.push(entry);
     this.session = null;
+    this.views.clear();
   }
 
   /** A rule's write: recorded, then the scenario's end conditions are checked. */
@@ -357,8 +375,7 @@ export class Match {
     return vars;
   }
 
-  private hydrated(vars: Vars): Record<string, unknown> {
-    const session = this.sessionNow();
+  private hydrated(vars: Vars, session = this.sessionNow()): Record<string, unknown> {
     return Object.fromEntries(Object.entries(vars).map(([name, { t, v }]) => [name, session.hydrate(v, t)]));
   }
 
@@ -400,7 +417,7 @@ export class Match {
 
   /** Every way to bind an offered intent's params so that all its gates pass. */
   private enumerate(frame: Extract<Frame, { f: 'prompt' }>, fx: Extract<Fx, { op: 'prompt' }>): Option[] {
-    const session = this.sessionNow();
+    const session = this.sessionFor(frame.seat);
     const options: Option[] = [];
     for (const name of fx.offer) {
       const intent = this.registry.intents.get(name)!;
@@ -438,6 +455,16 @@ export class Match {
     return value;
   }
 
+  /** The key of an indexed write, checked against the map's key type. */
+  private mapKey(target: SetTarget, where: string): string {
+    const key = dehydrate(this.evaluate(target.index!));
+    const spec = target.owner === 'game'
+      ? this.registry.globals.get(target.field)!
+      : this.registry.kinds.get(this.state.entities[this.scope()[target.owner].v as string]?.kind ?? '')?.fields.get(target.field);
+    if (spec?.type.k === 'map') this.checked(spec.type.key, key, where);
+    return key as string;
+  }
+
   private bound(bindings: { name: string; type: ValueType; value: Compiled }[]): Vars {
     return Object.fromEntries(bindings.map(({ name, type, value }) => [name, { t: type, v: dehydrate(this.evaluate(value)) }]));
   }
@@ -461,17 +488,21 @@ export class Match {
         for (const { target, value } of fx.writes) {
           if (this.state.ended) break;
           const next = this.checked(target.type, dehydrate(this.evaluate(value)), value.path);
+          const key = target.index ? this.mapKey(target, value.path) : target.key;
           // A write that changes nothing is not an event.
-          const same = (current: Value | undefined) => JSON.stringify(current) === JSON.stringify(next);
+          const same = (held: Value | undefined) =>
+            JSON.stringify(key === undefined ? held : (held as Record<string, Value>)[key]) === JSON.stringify(next);
           if (target.owner === 'game') {
-            if (!same(this.state.game[target.field])) this.write({ t: 'global', field: target.field, value: next });
+            if (same(this.state.game[target.field])) continue;
+            // A global is logged whole, so a keyed write records the map with that entry changed.
+            const whole = key === undefined ? next : { ...(this.state.game[target.field] as Record<string, Value>), [key]: next };
+            this.write({ t: 'global', field: target.field, value: whole });
           } else {
             const id = this.scope()[target.owner].v as string;
             const entity = this.state.entities[id];
             if (!entity) throw new RuleError(`${value.path}: "${id}" no longer exists`);
-            const held = entity.fields[target.field];
-            if (same(target.key === undefined ? held : (held as Record<string, Value>)[target.key])) continue;
-            this.write({ t: 'set', id, field: target.field, ...(target.key === undefined ? {} : { key: target.key }), value: next });
+            if (same(entity.fields[target.field])) continue;
+            this.write({ t: 'set', id, field: target.field, ...(key === undefined ? {} : { key }), value: next });
           }
         }
         break;

@@ -3,7 +3,7 @@
 # derived number comes from the ruleset.
 format: 1
 scenario: { id: worg-vs-scout, title: Worg against Scout }
-ruleset: { id: dnd-5e-2024-slice, version: 0.1.0 }
+ruleset: { id: dnd-5e-2024-slice, version: 0.2.0 }
 
 seats:
   wild: { behavior: hunter }

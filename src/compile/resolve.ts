@@ -15,11 +15,11 @@ import { layer, type LayerInput, type Layered } from './layers.ts';
 import {
   CompileError, RuleError,
   type BehaviorSpec, type Binding, type Compiled, type FieldSpec, type Fx, type IntentSpec, type KindSpec,
-  type ProcedureSpec, type Registry, type SignalSpec,
+  type ProcedureSpec, type Registry, type SetTarget, type SignalSpec,
 } from './program.ts';
 
 /** Names an effect may not bind: the globals every expression sees. */
-const RESERVED_VARS = new Set(['game', 'all', 'space', 'tables', 'seats', 'cel', 'self', 'seat']);
+const RESERVED_VARS = new Set(['game', 'all', 'space', 'tables', 'seats', 'cel', 'self', 'seat', 'viewer']);
 
 type Vars = Map<string, ValueType>;
 interface Scope {
@@ -148,7 +148,7 @@ function resolve({ doc, layers }: Layered, issues: Issue[]): Registry {
     globals, kinds, relations,
     signals: new Map<string, SignalSpec>(), procedures: new Map<string, ProcedureSpec>(),
     intents: new Map<string, IntentSpec>(), behaviors: new Map<string, BehaviorSpec>(),
-    blocks: new Map<string, Fx[]>(), addresses: new Map(), tables: {}, active: null,
+    blocks: new Map<string, Fx[]>(), addresses: new Map(), tables: {}, secrets: false, active: null,
   } as unknown as Registry;
 
   if (registry.space.vertical) issue('space.vertical', 'vertical movement is not supported by this core yet');
@@ -319,11 +319,21 @@ function resolve({ doc, layers }: Layered, issues: Issue[]): Registry {
   registry.compileGlobal = (source, path, into) =>
     expr(source, new Map(), path, undefined, (at, message) => into.push({ path: at, message }));
 
-  // ── Kinds: inits, derived values, checks ────────────────────────────────
+  // ── Visibility, then kinds: inits, derived values, checks ────────────────
+  const SEAT: ValueType = { k: 'seat' };
+  for (const [name, raw] of Object.entries(doc.globals ?? {})) {
+    if (typeof raw === 'string' || raw.visible === undefined) continue;
+    globals.get(name)!.visible = expr(raw.visible, new Map([['viewer', SEAT]]), `globals.${name}.visible`, ['bool']);
+    registry.secrets = true;
+  }
   for (const [name, kindDoc] of Object.entries(kindDocs)) {
     const spec = kinds.get(name)!;
     const self: Vars = new Map([['self', { k: 'ref', kind: name }]]);
     for (const [field, raw] of Object.entries(kindDoc.fields ?? {})) {
+      if (typeof raw !== 'string' && raw.visible !== undefined) {
+        spec.fields.get(field)!.visible = expr(raw.visible, new Map([...self, ['viewer', SEAT]]), `kinds.${name}.fields.${field}.visible`, ['bool']);
+        registry.secrets = true;
+      }
       if (typeof raw !== 'string' && raw.init !== undefined) {
         const fieldType = spec.fields.get(field)!.type;
         spec.fields.get(field)!.init = expr(raw.init, self, `kinds.${name}.fields.${field}.init`, [celType(fieldType)]);
@@ -439,9 +449,11 @@ function resolve({ doc, layers }: Layered, issues: Issue[]): Registry {
         declare(fx.roll.as, INT, `${path}.roll.as`);
         out.push({ op: 'roll', as: fx.roll.as, n, d });
       } else if ('set' in fx) {
-        const writes = Object.entries(fx.set as Record<string, Expr>).flatMap(([address, source]) => {
+        const writes = Object.entries(fx.set as Record<string, Expr>).flatMap(([address, source]): { target: SetTarget; value: Compiled }[] => {
           const at = `${path}.set.${address}`;
-          const [owner, field, key, ...rest] = address.split('.');
+          // `owner.field[expr]` writes a map entry whose key is computed when the write runs.
+          const indexed = /^([^.[\]]+)\.([^.[\]]+)\[(.+)\]$/.exec(address);
+          const [owner, field, key, ...rest] = indexed ? [indexed[1], indexed[2]] : address.split('.');
           let spec: FieldSpec | undefined;
           if (owner === 'game') spec = globals.get(field);
           else {
@@ -461,6 +473,14 @@ function resolve({ doc, layers }: Layered, issues: Issue[]): Registry {
             return [];
           }
           let target = spec.type;
+          if (indexed) {
+            if (spec.type.k !== 'map') {
+              issue(at, `"${field}" has no keys`);
+              return [];
+            }
+            const index = expr(indexed[3], here(), `${at}.key`, ['string']);
+            return [{ target: { owner, field, index, type: spec.type.val }, value: expr(source, here(), at, [celType(spec.type.val)]) }];
+          }
           if (key !== undefined) {
             if (spec.type.k !== 'map') {
               issue(at, `"${field}" has no keys`);

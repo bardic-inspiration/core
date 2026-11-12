@@ -4,9 +4,10 @@
 // write produces a new state and a new session.
 
 import { Cell, type SpaceHost } from '../lib/functions.ts';
-import { RuleError, type Compiled, type KindSpec, type Registry } from '../compile/program.ts';
+import { RuleError, type Compiled, type FieldSpec, type KindSpec, type Registry } from '../compile/program.ts';
 import type { ValueType } from '../types.ts';
 import { showType } from '../types.ts';
+import { produce } from 'immer';
 import type { State, Value } from './state.ts';
 
 /** What stays fixed for a whole match: the space, its host, and the seats. */
@@ -89,12 +90,26 @@ export class Session {
   readonly registry: Registry;
   readonly state: State;
   readonly world: World;
+  /** The seat whose view this is. Absent: the session sees everything, as the rules do. */
+  readonly viewer?: string;
+  private unfiltered: Session | null = null;
 
-  constructor(registry: Registry, state: State, world: World) {
+  constructor(registry: Registry, state: State, world: World, viewer?: string) {
     this.registry = registry;
     this.state = state;
     this.world = world;
+    this.viewer = viewer;
     this.globals = registry.globalsFor(this);
+  }
+
+  /**
+   * Whether `viewer` may see a field (of entity `id`) or a global (no id).
+   * The visibility expression itself is evaluated with everything in sight.
+   */
+  visibleTo(viewer: string, spec: FieldSpec, id?: string, kind?: string): boolean {
+    if (!spec.visible) return true;
+    if (this.viewer !== undefined) return (this.unfiltered ??= new Session(this.registry, this.state, this.world)).visibleTo(viewer, spec, id, kind);
+    return this.eval(spec.visible, { viewer, ...(id === undefined ? {} : { self: this.handle(id, kind!) }) }) === true;
   }
 
   /** Evaluates an expression with the given (already hydrated) variables. */
@@ -144,13 +159,21 @@ export class Session {
   }
 
   readGlobal(name: string): unknown {
-    return this.hydrate(this.state.game[name], this.registry.globals.get(name)!.type);
+    const spec = this.registry.globals.get(name)!;
+    if (this.viewer !== undefined && !this.visibleTo(this.viewer, spec)) {
+      throw new RuleError(`game.${name} is hidden from seat "${this.viewer}"`);
+    }
+    return this.hydrate(this.state.game[name], spec.type);
   }
 
   readField(id: string, kind: KindSpec, name: string): unknown {
     const entity = this.state.entities[id];
     if (!entity) throw new RuleError(`${kind.name} "${id}" no longer exists`);
-    return this.hydrate(entity.fields[name], kind.fields.get(name)!.type);
+    const spec = kind.fields.get(name)!;
+    if (this.viewer !== undefined && !this.visibleTo(this.viewer, spec, id, kind.name)) {
+      throw new RuleError(`${kind.name}.${name} of "${id}" is hidden from seat "${this.viewer}"`);
+    }
+    return this.hydrate(entity.fields[name], spec.type);
   }
 
   readDerived(id: string, kind: KindSpec, name: string): unknown {
@@ -191,4 +214,20 @@ export class Session {
   private kind(name: string): KindSpec {
     return this.registry.kinds.get(name)!;
   }
+}
+
+/** The state as `viewer` may know it: every field and global hidden from that seat is left out. */
+export function viewOf(registry: Registry, state: State, world: World, viewer: string): State {
+  if (!registry.secrets) return state;
+  const session = new Session(registry, state, world);
+  return (produce as (base: State, recipe: (draft: State) => void) => State)(state, (draft) => {
+    for (const spec of registry.globals.values()) {
+      if (!session.visibleTo(viewer, spec)) delete draft.game[spec.name];
+    }
+    for (const [id, entity] of Object.entries(state.entities)) {
+      for (const spec of registry.kinds.get(entity.kind)!.fields.values()) {
+        if (!session.visibleTo(viewer, spec, id, entity.kind)) delete draft.entities[id].fields[spec.name];
+      }
+    }
+  });
 }

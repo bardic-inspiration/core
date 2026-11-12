@@ -21,7 +21,7 @@ const named = (value: unknown, pattern = NAME) => ({
 const field = {
   anyOf: [
     { type: 'string' },
-    closed({ type: { type: 'string' }, default: {}, init: expr, doc: { type: 'string' } }, ['type']),
+    closed({ type: { type: 'string' }, default: {}, init: expr, visible: expr, doc: { type: 'string' } }, ['type']),
   ],
 };
 

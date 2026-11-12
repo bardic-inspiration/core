@@ -1,9 +1,9 @@
-# A tiny tick-driven sandbox of self-assembling bots, kept as a test fixture.
-# It has no grid, no turns, and no combat: bots salvage parts from a pile and
-# split into new bots, so state grows during play. It exercises what the two
-# shipped rulesets do not: a tick scheduler, and the slots and stacking patterns.
+# A tiny tick-driven fixture: bots salvage parts from a pile and split into
+# new bots, so state grows during play. It has no grid, no turns, and no
+# combat, and is the smallest ruleset with a tick scheduler and the slots and
+# stacking patterns. The full version of the idea is rulesets/junkyard.
 format: 1
-ruleset: { id: junkyard, version: 0.1.0 }
+ruleset: { id: ticker, version: 0.1.0 }
 
 uses:
   - pattern: slots

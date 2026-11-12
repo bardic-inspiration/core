@@ -4,13 +4,19 @@ A ludematic core: a format that expresses a game's ruleset as pure data, and
 one generic runtime that plays any ruleset written in it. The brief is
 [`RPG Core Design Document.md`](RPG%20Core%20Design%20Document.md).
 
-This is the prototype. It proves the central idea with two rulesets that
+This is the prototype. It proves the central idea with four rulesets that
 share no code, each a YAML file:
 
 - [`rulesets/checkers`](rulesets/checkers/ruleset.yaml): English draughts, a
   closed game.
 - [`rulesets/dnd-5e-2024-slice`](rulesets/dnd-5e-2024-slice/ruleset.yaml): a
-  D&D 5e (SRD 5.2) combat slice, played as a worg against a scout.
+  D&D 5e (SRD 5.2) combat slice. Three scenarios: a worg against a scout, a
+  pack ambush with ten creatures on seven seats, and a duel between two
+  spellcasters.
+- [`rulesets/holdem`](rulesets/holdem/ruleset.yaml): no-limit Texas Hold 'Em
+  for four, with hidden cards.
+- [`rulesets/junkyard`](rulesets/junkyard/ruleset.yaml): a sandbox of
+  self-assembling bots, with no winner.
 
 ## Run it
 
@@ -22,27 +28,48 @@ npm install
 npm test
 ```
 
-`npm test` type-checks and runs every test. It is the one check, and it
-proves the brief's three signs of success:
+`npm test` type-checks and runs every test. It proves the brief's three
+signs of success:
 
 | Sign of success | Proved by |
 |---|---|
 | Invalid rules data is refused at compile time. | [`tests/compile.test.ts`](tests/compile.test.ts), [`tests/layers.test.ts`](tests/layers.test.ts) |
-| Both rulesets run to an end state with every seat filled by an AI. | [`tests/determinism.test.ts`](tests/determinism.test.ts) |
+| Every ruleset runs to an end state with every seat filled by an AI. | [`tests/determinism.test.ts`](tests/determinism.test.ts) |
 | The same seed gives the same log, and replay gives the same final state. | [`tests/determinism.test.ts`](tests/determinism.test.ts) |
 
 To watch a match, print its event log:
 
 ```bash
-npm run play -- dnd-5e-2024-slice worg-vs-scout 3
+npm run play -- dnd-5e-2024-slice mage-duel 3
 ```
 
 ```bash
-npm run play -- checkers standard 1 --quiet
+npm run play -- holdem four-handed 1 --quiet
 ```
 
 The arguments are the ruleset, the scenario, and the seed. Node 22.6 or later
 is needed; it runs the TypeScript directly, so there is no build step.
+
+## Check a change
+
+```bash
+npm run validate
+```
+
+This is the check a pull request must pass, and
+[the workflow](.github/workflows/validate.yml) runs it. It type-checks,
+compiles every ruleset alone and with each of its extensions, loads and plays
+every scenario, compares the play against the recorded matches, and runs the
+tests.
+
+If a change is meant to alter how a match plays, regenerate the records and
+commit them with it:
+
+```bash
+npm run sim
+```
+
+[`data/`](data/README.md) describes the records.
 
 ## How it fits together
 
@@ -85,6 +112,8 @@ Read next:
 | [`src/host/grid.ts`](src/host/grid.ts) | A reference space host for headless play. |
 | [`src/load.ts`](src/load.ts) | Reads YAML from disk. Core itself never touches the file system. |
 | [`kit/`](kit), [`rulesets/`](rulesets) | Pure data. |
+| [`scripts/`](scripts) | `play` prints a match, `sim` records matches, `validate` is the pull-request check. |
+| [`data/`](data) | One record per recorded match. |
 | [`tests/`](tests) | The conformance tests, and a tick-driven fixture ruleset. |
 
 ## License
