@@ -1,15 +1,17 @@
 import { readFileSync } from 'node:fs';
 import { parse } from 'yaml';
-import { compile, loadScenario, Match, RandomSeat, UtilitySeat, type Registry, type Scenario, type Seat } from '../src/index.ts';
-import { loadKit } from '../src/load.ts';
-import { Session, dehydrate } from '../src/runtime/session.ts';
-import type { State } from '../src/index.ts';
+import { existsSync, readdirSync } from 'node:fs';
+import {
+  bindSeats, compile, compileBehaviors, compileExpression, loadScenario, Match,
+  type Behaviors, type BehaviorSetDoc, type Registry, type Scenario, type Seat, type State,
+} from '../src/index.ts';
+import { loadKit, readYaml } from '../src/load.ts';
 
 export const fixture = (name: string): any => parse(readFileSync(new URL(`./fixtures/${name}.yaml`, import.meta.url), 'utf8'));
 
 /** A minimal valid ruleset to mutate in refusal tests. */
 export const tiny = (): any => ({
-  format: 1,
+  format: 2,
   ruleset: { id: 'tiny', version: '1.0.0' },
   enums: { color: ['red', 'blue'] },
   globals: { turns: { type: 'int', default: 0 } },
@@ -30,11 +32,15 @@ export const tiny = (): any => ({
     },
   },
   flow: [{ while: 'true', do: [{ each: 'player', in: 'seats', do: [{ prompt: { seat: 'player', offer: ['bump'] } }] }] }],
-  behaviors: { eager: { scores: { bump: 1 } } },
+});
+
+/** A behavior set for the tiny ruleset. */
+export const tinyBehaviors = (behaviors: Record<string, unknown> = { eager: { scores: { bump: 1 } } }): any => ({
+  format: 2, behaviorSet: { id: 'tiny' }, ruleset: { id: 'tiny', version: '1.0.0' }, behaviors,
 });
 
 export const tinyScenario = (): any => ({
-  format: 1,
+  format: 2,
   scenario: { id: 'pair' },
   ruleset: { id: 'tiny', version: '1.0.0' },
   seats: { a: {}, b: {} },
@@ -47,15 +53,32 @@ export const tinyScenario = (): any => ({
 
 export const compileWith = (base: unknown, extensions: unknown[] = []): Registry => compile({ kit: loadKit(), base, extensions });
 
-/** The seats a scenario names, each driven by its behavior, or at random without one. */
-export const aiSeats = (scenario: Scenario, seed: string | number): Record<string, Seat> =>
-  Object.fromEntries(Object.entries(scenario.doc.seats).map(([id, spec]) => [
-    id, spec.behavior ? new UtilitySeat(spec.behavior, seed, id) : new RandomSeat(seed, id),
-  ]));
+const loaded = new WeakMap<Registry, Behaviors>();
 
-export const play = (registry: Registry, scenario: Scenario, seed: string | number) => {
+/**
+ * The behaviors that ship for a registry's ruleset: its default set, with
+ * every other set whose extensions are all loaded laid over it.
+ */
+export function behaviorsFor(registry: Registry): Behaviors {
+  let behaviors = loaded.get(registry);
+  if (!behaviors) {
+    const dir = `rulesets/${registry.id}/behaviors`;
+    const path = new URL(`../${dir}`, import.meta.url);
+    const files = existsSync(path) ? readdirSync(path).sort().map((file) => readYaml(`${dir}/${file}`) as BehaviorSetDoc) : [];
+    const fits = (set: BehaviorSetDoc) => (set.extensions ?? []).every((id) => registry.layers.some((layer) => layer.id === id));
+    const first = (set: BehaviorSetDoc) => (set.behaviorSet.id === 'default' ? 0 : 1);
+    behaviors = compileBehaviors(registry, files.filter(fits).sort((a, b) => first(a) - first(b)));
+    loaded.set(registry, behaviors);
+  }
+  return behaviors;
+}
+
+/** The seats a scenario names, each driven by its behavior, or at random without one. */
+export const aiSeats = (scenario: Scenario, behaviors: Behaviors): Record<string, Seat> => bindSeats(scenario, behaviors);
+
+export const play = (registry: Registry, scenario: Scenario, seed: string | number, behaviors = behaviorsFor(registry)) => {
   const match = new Match(registry, scenario, seed);
-  return { match, ...match.run(aiSeats(scenario, seed)) };
+  return { match, ...match.run(bindSeats(scenario, behaviors)) };
 };
 
 /** The CompileError message of a refused input, or '' when it was accepted. */
@@ -84,10 +107,7 @@ export function choose(match: Match, seat: string, intent: string, want: Record<
 
 /** Evaluates a global-scope expression over a state, as a stored value. */
 export function read(registry: Registry, scenario: Scenario, state: State, source: string): unknown {
-  const issues: { path: string; message: string }[] = [];
-  const compiled = registry.compileGlobal(source, 'test', issues);
-  if (issues.length > 0) throw new Error(issues[0].message);
-  return dehydrate(new Session(registry, state, scenario.world).eval(compiled));
+  return compileExpression(registry, source).evaluate(state, scenario);
 }
 
 /** Ends turns and declines reactions until `seat` is asked to choose `intent` (or anything, when no intent is named). */

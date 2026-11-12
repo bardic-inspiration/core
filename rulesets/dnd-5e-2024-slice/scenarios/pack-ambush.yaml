@@ -7,9 +7,9 @@
 # Guard, Scout, Priest Acolyte), written from the published blocks
 # and not yet checked against ttrpg-library. The acolyte's healing is given
 # as two level 1 slots, where the stat block gives uses per day.
-format: 1
+format: 2
 scenario: { id: pack-ambush, title: Pack ambush }
-ruleset: { id: dnd-5e-2024-slice, version: 0.2.0 }
+ruleset: { id: dnd-5e-2024-slice, version: 0.3.0 }
 
 seats:
   vanguard: { behavior: defender }
@@ -24,7 +24,12 @@ space:
   width: 26
   height: 14
   # Boulders that block movement and line of sight.
-  blocked: [[11, 3], [11, 4], [12, 9], [12, 10], [16, 6]]
+  cells:
+    - { at: [11, 3], terrain: rock }
+    - { at: [11, 4], terrain: rock }
+    - { at: [12, 9], terrain: rock }
+    - { at: [12, 10], terrain: rock }
+    - { at: [16, 6], terrain: rock }
 
 entities:
   # The patrol.

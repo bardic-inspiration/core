@@ -16,7 +16,9 @@ npm run sim -- --seeds 200 --only holdem/four-handed --logs
 `--logs` also writes each match's full event log to `data/logs/`, which is
 not committed.
 
-A record holds nothing that changes between runs of the same seed: no clock
+A record is worked out from a match's log alone (`summarize` in
+[`src/record.ts`](../src/record.ts)), so anything that has a log can make
+one. It holds nothing that changes between runs of the same seed: no clock
 and no machine. So the file is also a regression check. If a rule, a
 behavior, or the runtime changes how a match plays, that match's `logHash`
 changes, and `npm run validate` fails until the file is regenerated and the
@@ -26,7 +28,7 @@ difference is committed with the change that caused it.
 
 | Field | Holds |
 |---|---|
-| `ruleset`, `version`, `scenario`, `seed` | What was played. |
+| `ruleset`, `version`, `scenario`, `seed` | What was played. The seed is a string, as the log's first entry holds it. |
 | `outcome` | What the scenario's end condition reported. |
 | `decisions` | How many times a seat chose. |
 | `forced` | Decisions with only one legal intent. |

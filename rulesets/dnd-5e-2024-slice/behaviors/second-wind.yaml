@@ -1,0 +1,9 @@
+# Scores for the Second Wind extension's intent, laid over the default set.
+format: 2
+behaviorSet: { id: second-wind }
+ruleset: { id: dnd-5e-2024-slice, version: 0.3.0 }
+extensions: [second-wind]
+
+behaviors:
+  hunter: { scores: { secondWind: 150 } }
+  skirmisher: { scores: { secondWind: 150 } }

@@ -1,0 +1,11 @@
+# How the checkers AI seats play.
+format: 2
+behaviorSet: { id: default }
+ruleset: { id: checkers, version: 0.2.0 }
+
+behaviors:
+  simple:
+    doc: Takes captures, likes crowning, otherwise moves at random.
+    scores:
+      jump: "10 + (to.y == piece.farRow ? 5 : 0)"
+      step: "1 + (!piece.king && to.y == piece.farRow ? 5 : 0)"

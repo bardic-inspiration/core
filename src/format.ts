@@ -1,9 +1,10 @@
-// The authored document shapes: ruleset layers, the pattern kit, and scenarios.
+// The authored document shapes: ruleset layers, the pattern kit, behavior sets,
+// and scenarios.
 // These are what a YAML file parses into; `schemas.ts` holds the JSON Schemas
 // that refuse anything else, and `docs/format.md` describes them in prose.
 
 /** The format version this build of core reads. Rulesets are versioned separately. */
-export const FORMAT_VERSION = 1;
+export const FORMAT_VERSION = 2;
 
 /** A CEL expression. YAML may give a bare number or boolean; the compiler stringifies it. */
 export type Expr = string | number | boolean;
@@ -117,8 +118,17 @@ export interface GoalDoc {
 
 export interface BehaviorDoc {
   doc?: string;
-  scores: Record<string, Expr>;
+  scores?: Record<string, Expr>;
   goals?: GoalDoc[];
+}
+
+/** A typed attribute every cell of the map carries. */
+export interface CellLayerDoc {
+  /** `int`, `number`, `bool`, `string`, or an enum name. */
+  type: string;
+  /** The value of a cell the scenario says nothing about. */
+  default: unknown;
+  doc?: string;
 }
 
 export interface SpaceDoc {
@@ -132,6 +142,12 @@ export interface SpaceDoc {
   vertical?: boolean;
   width?: number;
   height?: number;
+  /** What each cell holds. The scenario's `space.cells` gives the values. */
+  layers?: Record<string, CellLayerDoc>;
+  /** A bool expression over `cell` (its layer values): nothing can be in such a cell. The host respects it. */
+  blocksMove?: Expr;
+  /** A bool expression over `cell`: such a cell breaks a line of sight that crosses it. The host respects it. */
+  blocksSight?: Expr;
 }
 
 export interface PatternUse {
@@ -156,7 +172,6 @@ export interface RulesBody {
   /** Named lists of intents a prompt can offer, so a layer can add an intent to a prompt it does not own. */
   menus?: Record<string, string[]>;
   flow?: EffectDoc[];
-  behaviors?: Record<string, BehaviorDoc>;
 }
 
 export interface RulesetDoc extends RulesBody {
@@ -170,6 +185,20 @@ export interface ExtensionDoc extends RulesBody {
   format: number;
   extension: { id: string; version: string; title?: string };
   extends: { id: string; version: string };
+}
+
+/**
+ * A set of behaviors, kept apart from the rules they play. It is compiled
+ * against a ruleset's registry; sets given together merge in order, so a
+ * later one may add behaviors, scores, and goals, or replace them.
+ */
+export interface BehaviorSetDoc {
+  format: number;
+  behaviorSet: { id: string; title?: string };
+  ruleset: { id: string; version: string };
+  /** Extensions whose intents this set scores; each must be among the registry's layers. */
+  extensions?: string[];
+  behaviors: Record<string, BehaviorDoc>;
 }
 
 export interface PatternDoc {
@@ -189,7 +218,8 @@ export interface ScenarioDoc {
   scenario: { id: string; title?: string };
   ruleset: { id: string; version: string };
   seats: Record<string, { behavior?: string; referee?: boolean }>;
-  space?: { width: number; height: number; blocked?: [number, number][] };
+  /** The map. Each entry of `cells` gives one cell's layer values: `{ at: [x, y], terrain: wall }`. */
+  space?: { width: number; height: number; cells?: ({ at: [number, number] } & Record<string, unknown>)[] };
   game?: Record<string, unknown>;
   entities?: { id?: string; kind: string; fields?: Record<string, unknown> }[];
   links?: { rel: string; from: string; to: string }[];

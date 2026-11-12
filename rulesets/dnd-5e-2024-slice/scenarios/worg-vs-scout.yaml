@@ -1,9 +1,9 @@
 # A worg hunts a scout across open ground. Stat-block inputs are the ones in
 # ttrpg-library (content/dnd-5e-2024/creature/worg.json, scout.json); every
 # derived number comes from the ruleset.
-format: 1
+format: 2
 scenario: { id: worg-vs-scout, title: Worg against Scout }
-ruleset: { id: dnd-5e-2024-slice, version: 0.2.0 }
+ruleset: { id: dnd-5e-2024-slice, version: 0.3.0 }
 
 seats:
   wild: { behavior: hunter }

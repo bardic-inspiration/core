@@ -17,21 +17,78 @@ export class Cell {
   }
 }
 
+export type Point = { x: number; y: number };
+
+/** One cell's layer values: plain numbers, booleans, and strings, one per declared layer. */
+export type CellValues = Record<string, number | boolean | string>;
+
 /**
- * What the engine must answer about space. Core specifies these; the engine
- * (or `host/grid.ts`, for headless play) implements them. Cells and distances
- * are plain numbers here; distances are in the ruleset's units.
+ * The map a host answers about. Core works it out from the ruleset's `space`
+ * and the scenario's, and hands it to the host as plain data: the host never
+ * evaluates a rule.
  */
-export interface SpaceHost {
-  inBounds(cell: { x: number; y: number }): boolean;
-  distance(a: { x: number; y: number }, b: { x: number; y: number }): number;
-  neighbors(cell: { x: number; y: number }): { x: number; y: number }[];
-  cellsWithin(cell: { x: number; y: number }, range: number): { x: number; y: number }[];
-  lineOfSight(a: { x: number; y: number }, b: { x: number; y: number }): boolean;
+export interface SpaceMap {
+  grid: 'square';
+  /** Whether diagonal neighbours are adjacent (8) or not (4). */
+  adjacency: 4 | 8;
+  /** Game units per cell. Distances and ranges are in these units. */
+  unit: number;
+  width: number;
+  height: number;
+  /** The layer values of every cell not listed in `cells`. */
+  defaults: CellValues;
+  /** The cells the scenario gives values to, each with every layer filled in. */
+  cells: { x: number; y: number; values: CellValues }[];
+  /** The cells the ruleset's `space.blocksMove` holds for. */
+  blocksMove: Point[];
+  /** The cells the ruleset's `space.blocksSight` holds for. */
+  blocksSight: Point[];
 }
 
-const plain = (cell: Cell) => ({ x: Number(cell.x), y: Number(cell.y) });
-const lift = (cell: { x: number; y: number }) => new Cell(BigInt(cell.x), BigInt(cell.y));
+/**
+ * What the engine must answer about space. Core specifies these; the engine
+ * (or `host/grid.ts`, for headless play) implements them. The contract, with
+ * units, ordering, and edge cases, is `docs/host.md`. Every function is pure:
+ * the same map and arguments always give the same answer, in the same order.
+ */
+export interface SpaceHost {
+  /** True when the cell is on the map and does not block movement: a place something can be. */
+  inBounds(cell: Point): boolean;
+  /** The distance between two cells in game units, by the grid's adjacency. Ignores what lies between. */
+  distance(a: Point, b: Point): number;
+  /** The in-bounds cells adjacent to `cell`, without `cell` itself, in row order. */
+  neighbors(cell: Point): Point[];
+  /** The in-bounds cells at most `range` game units from `cell`, itself included when in bounds, in row order. */
+  cellsWithin(cell: Point, range: number): Point[];
+  /** False when a cell that blocks sight lies strictly between the two cells. */
+  lineOfSight(a: Point, b: Point): boolean;
+  /** The layer values of a cell on the map, every layer present. Core never asks about a cell off the map. */
+  cellAt(cell: Point): CellValues;
+}
+
+/** One question an expression put to the host, and its answer. */
+export interface HostCall {
+  fn: keyof SpaceHost;
+  args: (Point | number)[];
+  result: boolean | number | Point[] | CellValues;
+}
+
+/** A host that answers as `host` does and notes every call in `into`. */
+export function tracedHost(host: SpaceHost, into: HostCall[]): SpaceHost {
+  const wrap = <K extends keyof SpaceHost>(fn: K): SpaceHost[K] =>
+    ((...args: (Point | number)[]) => {
+      const result = (host[fn] as (...given: (Point | number)[]) => HostCall['result'])(...args);
+      into.push({ fn, args, result });
+      return result;
+    }) as SpaceHost[K];
+  return {
+    inBounds: wrap('inBounds'), distance: wrap('distance'), neighbors: wrap('neighbors'),
+    cellsWithin: wrap('cellsWithin'), lineOfSight: wrap('lineOfSight'), cellAt: wrap('cellAt'),
+  };
+}
+
+export const plain = (cell: Cell): Point => ({ x: Number(cell.x), y: Number(cell.y) });
+const lift = (cell: Point) => new Cell(BigInt(cell.x), BigInt(cell.y));
 const abs = (n: bigint) => (n < 0n ? -n : n);
 
 export function floorDiv(a: bigint, b: bigint): bigint {
@@ -53,7 +110,11 @@ function sortBy<T>(items: T[], keys: bigint[]): T[] {
     .map((entry) => entry.item);
 }
 
-/** Registers the library. `host` returns the space host of the evaluation in progress. */
+/**
+ * Registers the library. `host` returns the space host of the evaluation in
+ * progress. `cellAt` is registered by the compiler, which generates its
+ * return type from the ruleset's cell layers.
+ */
 export function registerFunctions(env: Environment, host: () => SpaceHost): void {
   const fn = (signature: string, handler: (...args: any[]) => unknown) => env.registerFunction(signature, handler as never);
   env.registerType('Cell', { ctor: Cell, fields: { x: 'int', y: 'int' } } as never);

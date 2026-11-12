@@ -2,13 +2,13 @@
 // only what the base marks open.
 
 import { describe, expect, it } from 'vitest';
-import { loadScenario, Match, UtilitySeat, fold } from '../src/index.ts';
+import { compileBehaviors, loadScenario, Match, UtilitySeat, fold } from '../src/index.ts';
 import { loadRuleset, loadScenarioFile, readYaml } from '../src/load.ts';
-import { aiSeats, compileWith, fixture, read, refusal, tiny } from './helpers.ts';
+import { behaviorsFor, compileWith, fixture, play, read, refusal, tiny } from './helpers.ts';
 
 const base = () => readYaml('rulesets/dnd-5e-2024-slice/ruleset.yaml');
-const extension = (body: Record<string, unknown>, wants = '0.2.0') => ({
-  format: 1, extension: { id: 'test', version: '0.1.0' }, extends: { id: 'dnd-5e-2024-slice', version: wants }, ...body,
+const extension = (body: Record<string, unknown>, wants = '0.3.0') => ({
+  format: 2, extension: { id: 'test', version: '0.1.0' }, extends: { id: 'dnd-5e-2024-slice', version: wants }, ...body,
 });
 
 describe('extensions', () => {
@@ -16,9 +16,11 @@ describe('extensions', () => {
     const registry = loadRuleset('dnd-5e-2024-slice', ['second-wind']);
     expect(registry.layers.map((layer) => layer.id)).toEqual(['dnd-5e-2024-slice', 'second-wind']);
     expect(registry.addresses.has('creature.secondWinds')).toBe(true);
+    // The scores that make the AI use it are a behavior set of their own, laid over the default.
+    expect(behaviorsFor(registry).sets).toEqual(['default', 'second-wind']);
     const scenario = loadScenarioFile(registry, 'dnd-5e-2024-slice', 'worg-vs-scout');
     const used = [1, 2, 3, 4, 5, 6].some((seed) => {
-      const { log, state } = new Match(registry, scenario, seed).run(aiSeats(scenario, seed));
+      const { log, state } = play(registry, scenario, seed);
       expect(fold(log)).toEqual(state);
       return log.some((event) => event.t === 'intent' && event.intent === 'secondWind');
     });
@@ -54,7 +56,7 @@ describe('extensions', () => {
   });
 
   it('refuses an extension written for another ruleset or an incompatible version', () => {
-    expect(refusal(() => compileWith(base(), [extension({}, '0.3.0')]))).toMatch(/extends dnd-5e-2024-slice@0\.3\.0/);
+    expect(refusal(() => compileWith(base(), [extension({}, '0.4.0')]))).toMatch(/extends dnd-5e-2024-slice@0\.4\.0/);
     expect(refusal(() => compileWith(tiny(), [extension({})]))).toMatch(/but the base is tiny@1\.0\.0/);
   });
 
@@ -90,8 +92,9 @@ describe('patterns', () => {
 
 describe('a tick-driven sandbox (fixture)', () => {
   const registry = compileWith(fixture('ticker'));
+  const builder = () => new UtilitySeat(compileBehaviors(registry, fixture('ticker.behaviors')).byName.get('builder')!);
   const scenario = loadScenario(registry, {
-    format: 1,
+    format: 2,
     scenario: { id: 'yard' },
     ruleset: { id: 'ticker', version: '0.1.0' },
     seats: { yard: { behavior: 'builder' } },
@@ -101,7 +104,7 @@ describe('a tick-driven sandbox (fixture)', () => {
 
   it('grows state during play: bots salvage parts and split into new bots', () => {
     const match = new Match(registry, scenario, 7);
-    const { outcome, state, log } = match.run({ yard: new UtilitySeat('builder', 7, 'yard') });
+    const { outcome, state, log } = match.run({ yard: builder() });
     expect(outcome.bots).toBe(4);
     expect(Object.values(state.entities).filter((entity) => entity.kind === 'part')).toHaveLength(6);
     expect(state.game.scrap).toBe(0);
@@ -111,7 +114,7 @@ describe('a tick-driven sandbox (fixture)', () => {
 
   it('stacks part bonuses by the declared rule', () => {
     const match = new Match(registry, scenario, 7);
-    match.run({ yard: new UtilitySeat('builder', 7, 'yard') });
+    match.run({ yard: builder() });
     const mounted = (match.state.links.mounts ?? []).filter(([from]) => from === 'first').map(([, to]) => match.state.entities[to].fields);
     expect(mounted.length).toBeGreaterThan(0);
     // Power sums over the base of 1; armor counts only the best part.

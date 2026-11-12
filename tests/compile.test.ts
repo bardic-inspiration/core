@@ -30,7 +30,7 @@ describe('compile', () => {
   // Each case breaks the minimal ruleset one way and names the reason it must be refused for.
   const refusals: [string, (doc: any) => void, RegExp][] = [
     ['an unknown top-level key', (d) => { d.rules = {}; }, /unknown key "rules"/],
-    ['an unsupported format version', (d) => { d.format = 2; }, /format 2 is not supported/],
+    ['an unsupported format version', (d) => { d.format = 1; }, /format 1 is not supported/],
     ['an unknown effect', (d) => { d.intents.bump.effects.push({ teleport: 'token' }); }, /intents\.bump\.effects/],
     ['an unknown field type', (d) => { d.kinds.token.fields.value = 'integer'; }, /unknown type "integer"/],
     ['a reserved kind name', (d) => { d.kinds.string = {}; }, /reserved type name/],
@@ -60,7 +60,6 @@ describe('compile', () => {
     ['an unknown pattern', (d) => { d.uses = [{ pattern: 'mana' }]; }, /unknown pattern "mana"/],
     ['a pattern missing a param', (d) => { d.uses = [{ pattern: 'pool', with: { kind: 'token', name: 'hp' } }]; }, /pattern "pool" needs "max"/],
     ['a pattern given an unknown param', (d) => { d.uses = [{ pattern: 'check', with: { name: 'test', dice: 3 } }]; }, /has no param "dice"/],
-    ['a behavior scoring an unknown intent', (d) => { d.behaviors.eager.scores.pass = 1; }, /unknown intent "pass"/],
     ['a relation to an unknown kind', (d) => { d.relations = { holds: { from: 'token', to: 'bag' } }; }, /unknown kind "bag"/],
     ['vertical movement, which core does not support yet', (d) => { d.space = { grid: 'square', vertical: true }; }, /vertical movement is not supported/],
     ['a mixed-type table', (d) => { d.tables = { odd: { a: 1, b: 'two' } }; }, /table entries must share one type/],
@@ -99,8 +98,7 @@ describe('scenario', () => {
     ['an undeclared global', (d) => { d.game = { score: 1 }; }, /declares no such global/],
     ['a space the ruleset does not have', (d) => { d.space = { width: 3, height: 3 }; }, /declares no space/],
     ['an end condition with a bad address', (d) => { d.end[0].when = 'game.turn > 3'; }, /No such key: turn/],
-    ['an end condition that is not a bool', (d) => { d.end[0].when = 'game.turns'; }, /an end condition is a bool/],
-    ['an unknown behavior', (d) => { d.seats.a.behavior = 'lazy'; }, /unknown behavior "lazy"/],
+    ['an end condition that is not a bool', (d) => { d.end[0].when = 'game.turns'; }, /is int, but bool is needed/],
   ];
 
   it.each(scenarioRefusals)('refuses %s', (_name, breakIt, reason) => {
@@ -111,7 +109,7 @@ describe('scenario', () => {
 
   it('holds a ruleset with fixed seats to exactly those seats', () => {
     const checkers = loadRuleset('checkers');
-    const doc = { format: 1, scenario: { id: 'x' }, ruleset: { id: 'checkers', version: '0.1.0' }, seats: { red: {}, green: {} } };
+    const doc = { format: 2, scenario: { id: 'x' }, ruleset: { id: 'checkers', version: '0.2.0' }, seats: { red: {}, green: {} } };
     expect(refusal(() => loadScenario(checkers, doc))).toMatch(/fixes the seats as red, black/);
   });
 });

@@ -26,13 +26,13 @@ const mean = (values: number[]) => values.reduce((sum, value) => sum + value, 0)
 try {
   const records: MatchRecord[] = [];
   const rows: Record<string, string | number>[] = [];
-  for (const { ruleset, scenario, registry, loaded } of shipped()) {
+  for (const { ruleset, scenario, registry, behaviors, loaded } of shipped()) {
     const name = `${ruleset}/${scenario}`;
     if (only && only !== name) continue;
     const played: MatchRecord[] = [];
     let ms = 0;
     for (let seed = 1; seed <= seeds; seed++) {
-      const result = measure(registry, loaded, seed);
+      const result = measure(registry, loaded, behaviors, seed);
       played.push(result.record);
       ms += result.ms;
       if (args.includes('--logs')) {

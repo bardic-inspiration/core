@@ -6,7 +6,7 @@
 
 import { Environment } from '@marcbachmann/cel-js';
 import type { EffectDoc, Expr, FieldDoc, RulesetDoc } from '../format.ts';
-import { registerFunctions } from '../lib/functions.ts';
+import { plain, registerFunctions, tracedHost, type Cell } from '../lib/functions.ts';
 import { emptyState, type Value } from '../runtime/state.ts';
 import { invalid, normalize, type Session } from '../runtime/session.ts';
 import type { Issue } from '../schemas.ts';
@@ -14,7 +14,7 @@ import { RESERVED_TYPE_NAMES, celAssignable, celType, parseType, showType, type 
 import { layer, type LayerInput, type Layered } from './layers.ts';
 import {
   CompileError, RuleError,
-  type BehaviorSpec, type Binding, type Compiled, type FieldSpec, type Fx, type IntentSpec, type KindSpec,
+  type Binding, type CellLayerSpec, type Compiled, type FieldSpec, type Fx, type IntentSpec, type KindSpec,
   type ProcedureSpec, type Registry, type SetTarget, type SignalSpec,
 } from './program.ts';
 
@@ -38,7 +38,7 @@ function visible(scope: Scope | undefined): Vars {
 }
 
 /** The value type of a CEL type the checker inferred, or undefined when it has none. */
-function fromCelType(text: string): ValueType | undefined {
+export function fromCelType(text: string): ValueType | undefined {
   const source = text.replace(/\s+/g, '');
   if (source === 'int') return INT;
   if (source === 'double') return { k: 'number' };
@@ -147,12 +147,25 @@ function resolve({ doc, layers }: Layered, issues: Issue[]): Registry {
     space: doc.space ?? { grid: 'none' as const },
     globals, kinds, relations,
     signals: new Map<string, SignalSpec>(), procedures: new Map<string, ProcedureSpec>(),
-    intents: new Map<string, IntentSpec>(), behaviors: new Map<string, BehaviorSpec>(),
-    blocks: new Map<string, Fx[]>(), addresses: new Map(), tables: {}, secrets: false, active: null,
+    intents: new Map<string, IntentSpec>(), cellLayers: new Map<string, CellLayerSpec>(),
+    blocks: new Map<string, Fx[]>(), addresses: new Map(), tables: {}, secrets: false, active: null, trace: null,
   } as unknown as Registry;
 
   if (registry.space.vertical) issue('space.vertical', 'vertical movement is not supported by this core yet');
   if (registry.space.grid === 'none' && Object.keys(doc.space ?? {}).length > 1) issue('space', 'a ruleset with no grid declares nothing else about space');
+
+  for (const [name, layerDoc] of Object.entries(registry.space.layers ?? {})) {
+    const path = `space.layers.${name}`;
+    const layerType = type(layerDoc.type, `${path}.type`);
+    if (name === 'at') issue(path, '"at" is where a scenario says which cell it means; name the layer something else');
+    if (!['int', 'number', 'bool', 'string', 'enum'].includes(layerType.k)) {
+      issue(`${path}.type`, `a cell layer holds an int, number, bool, string, or enum, not a ${showType(layerType)}`);
+      continue;
+    }
+    const reason = invalid(registry, staticWorld, emptyState(), layerType, layerDoc.default);
+    if (reason) issue(`${path}.default`, reason);
+    registry.cellLayers.set(name, { name, type: layerType, default: layerDoc.default as Value });
+  }
 
   for (const [name, raw] of Object.entries(doc.globals ?? {})) {
     globals.set(name, fieldSpec(name, raw, `globals.${name}`));
@@ -209,12 +222,32 @@ function resolve({ doc, layers }: Layered, issues: Issue[]): Registry {
 
   // ── The CEL environment: one type per kind, generated from the declarations ──
   const env = new Environment();
-  registerFunctions(env, () => {
+  const hostNow = () => {
     const session = registry.active;
     if (!session) throw new RuleError('spatial functions need a running match');
     if (registry.space.grid === 'none') throw new RuleError('this ruleset declares no space');
-    return session.world.host;
-  });
+    return registry.trace ? tracedHost(session.world.host, registry.trace) : session.world.host;
+  };
+  registerFunctions(env, hostNow);
+
+  // A cell's layer values, typed from the declarations, so `cellAt(c).terain` fails the build.
+  class CellData {
+    constructor(values: Record<string, unknown>) {
+      Object.assign(this, values);
+    }
+  }
+  env.registerType('CellData', {
+    ctor: CellData, fields: Object.fromEntries([...registry.cellLayers.values()].map((layer) => [layer.name, celType(layer.type)])),
+  } as never);
+  registry.cellData = (values) => new CellData(Object.fromEntries([...registry.cellLayers.values()].map((layer) =>
+    [layer.name, layer.type.k === 'int' ? BigInt(values[layer.name] as number) : values[layer.name]])));
+  env.registerFunction('cellAt(Cell): CellData', ((cell: Cell) => {
+    const host = hostNow();
+    const at = plain(cell);
+    const { width, height } = registry.active!.world.space;
+    if (at.x < 0 || at.y < 0 || at.x >= width || at.y >= height) throw new RuleError(`cellAt: (${at.x}, ${at.y}) is off the map`);
+    return registry.cellData(host.cellAt(at));
+  }) as never);
 
   /** A class whose getters read through the session it was made for. */
   const reader = (members: Record<string, (self: { $s: Session; id: string }) => unknown>) => {
@@ -271,7 +304,12 @@ function resolve({ doc, layers }: Layered, issues: Issue[]): Registry {
   env.registerType('All', { ctor: All, fields: Object.fromEntries([...kinds.keys()].map((name) => [name, `list<kind.${name}>`])) } as never);
   env.registerType('Space', { ctor: Space, fields: { width: 'int', height: 'int', unit: 'int' } } as never);
   env.registerType('Tables', { ctor: Tables, fields: tableTypes } as never);
-  env.registerVariable('game', 'Game').registerVariable('all', 'All').registerVariable('space', 'Space')
+  // The space rules are worked out once per map, before any match: they see a cell and the tables, and no state.
+  // Cloning closes an environment to new entries, so both scopes are clones of the bare one.
+  const staticEnv = env.clone();
+  staticEnv.registerVariable('tables', 'Tables');
+  const full = env.clone();
+  full.registerVariable('game', 'Game').registerVariable('all', 'All').registerVariable('space', 'Space')
     .registerVariable('tables', 'Tables').registerVariable('seats', 'list<string>');
   registry.tables = tables;
   registry.globalsFor = (session) => ({
@@ -280,12 +318,13 @@ function resolve({ doc, layers }: Layered, issues: Issue[]): Registry {
   });
 
   const environments = new Map<string, Environment>();
-  const envFor = (vars: Vars): Environment => {
-    const entries = [...vars].map(([name, varType]) => [name, celType(varType)] as const).sort(([a], [b]) => a.localeCompare(b));
-    const key = entries.map(([name, cel]) => `${name}:${cel}`).join(';');
+  const envFor = (vars: ReadonlyMap<string, ValueType | 'CellData'>, root: Environment): Environment => {
+    const entries = [...vars].map(([name, varType]) => [name, varType === 'CellData' ? varType : celType(varType)] as const)
+      .sort(([a], [b]) => a.localeCompare(b));
+    const key = `${root === full ? '' : 'static;'}${entries.map(([name, cel]) => `${name}:${cel}`).join(';')}`;
     let scoped = environments.get(key);
     if (!scoped) {
-      scoped = env.clone();
+      scoped = root.clone();
       for (const [name, cel] of entries) scoped.registerVariable(name, cel);
       environments.set(key, scoped);
     }
@@ -295,14 +334,17 @@ function resolve({ doc, layers }: Layered, issues: Issue[]): Registry {
   const FAILED: Compiled = { source: '', path: '', type: 'dyn', run: () => { throw new RuleError('expression did not compile'); } };
 
   /** Parses and type-checks one expression. `expected` lists the CEL types it may have. */
-  const expr = (source: Expr, vars: Vars, path: string, expected?: string[], report = issue): Compiled => {
+  const expr = (
+    source: Expr, vars: ReadonlyMap<string, ValueType | 'CellData'>, path: string, expected?: string[],
+    report = issue, prefix = 'ruleset.', root = full,
+  ): Compiled => {
     const text = String(source);
     const fail = (message: string) => {
       report(path, `${message} (in \`${text}\`)`);
       return FAILED;
     };
     try {
-      const scoped = envFor(vars);
+      const scoped = envFor(vars, root);
       const checked = scoped.check(text);
       if (!checked.valid) return fail(String(checked.error?.message ?? 'invalid expression').split('\n')[0]);
       const actual = String(checked.type);
@@ -311,13 +353,18 @@ function resolve({ doc, layers }: Layered, issues: Issue[]): Registry {
         return fail(`is ${actual}, but ${expected.join(' or ')} is needed`);
       }
       const parsed = scoped.parse(text);
-      return { source: text, path: `ruleset.${path}`, type: actual, run: (context) => parsed(context) };
+      return { source: text, path: `${prefix}${path}`, type: actual, run: (context) => parsed(context) };
     } catch (error) {
       return fail((error as Error).message.split('\n')[0]);
     }
   };
-  registry.compileGlobal = (source, path, into) =>
-    expr(source, new Map(), path, undefined, (at, message) => into.push({ path: at, message }));
+  registry.compileExpr = (source, vars, path, into, expected) =>
+    expr(source, vars, path, expected, (at, message) => into.push({ path: at, message }), '');
+
+  for (const rule of ['blocksMove', 'blocksSight'] as const) {
+    const source = registry.space[rule];
+    if (source !== undefined) registry[rule] = expr(source, new Map([['cell', 'CellData']]), `space.${rule}`, ['bool'], issue, 'ruleset.', staticEnv);
+  }
 
   // ── Visibility, then kinds: inits, derived values, checks ────────────────
   const SEAT: ValueType = { k: 'seat' };
@@ -637,31 +684,6 @@ function resolve({ doc, layers }: Layered, issues: Issue[]): Registry {
     signal.reactions.push({ when, do: `reactions.${index}.do` });
   });
   block(doc.flow ?? [], undefined, 'flow');
-
-  // ── Behaviors ───────────────────────────────────────────────────────────
-  for (const [name, behavior] of Object.entries(doc.behaviors ?? {})) {
-    const spec: BehaviorSpec = { name, scores: new Map(), goals: [] };
-    const scopeOf = (intent: string, path: string): Vars | undefined => {
-      const vars = intentScopes.get(intent);
-      if (!vars) issue(path, `unknown intent "${intent}"`);
-      return vars;
-    };
-    for (const [intent, source] of Object.entries(behavior.scores)) {
-      const path = `behaviors.${name}.scores.${intent}`;
-      const vars = scopeOf(intent, path);
-      if (vars) spec.scores.set(intent, expr(source, vars, path, ['int', 'double']));
-    }
-    (behavior.goals ?? []).forEach((goal, index) => {
-      const scale = new Map<string, { when: Compiled; factor: number }>();
-      for (const [intent, factor] of Object.entries(goal.scale)) {
-        const path = `behaviors.${name}.goals.${index}`;
-        const vars = scopeOf(intent, `${path}.scale.${intent}`);
-        if (vars) scale.set(intent, { when: expr(goal.when, vars, `${path}.when`, ['bool']), factor });
-      }
-      spec.goals.push({ name: goal.name, scale });
-    });
-    registry.behaviors.set(name, spec);
-  }
 
   // ── Addresses: every fact the ruleset allows to exist ────────────────────
   const address = (path: string, of: 'field' | 'derived' | 'relation' | 'global' | 'table' | 'key', valueType: string) =>

@@ -1,5 +1,6 @@
 // The check a pull request must pass, apart from the tests:
-//   1. every ruleset under rulesets/ compiles, alone and with each of its extensions;
+//   1. every ruleset under rulesets/ compiles, alone and with each of its extensions,
+//      and every behavior set compiles against the ruleset it is written for;
 //   2. every scenario loads against its ruleset;
 //   3. every scenario plays to an end the scenario or the flow declares, and folding its log gives its final state;
 //   4. data/matches.jsonl still matches how the rules play.
@@ -8,8 +9,9 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { CompileError } from '../src/index.ts';
-import { loadRuleset } from '../src/load.ts';
-import { extensionsOf, measure, shipped, type MatchRecord } from './measure.ts';
+import type { BehaviorSetDoc } from '../src/index.ts';
+import { loadBehaviors, loadRuleset, readYaml } from '../src/load.ts';
+import { behaviorSetsOf, extensionsOf, measure, shipped, type MatchRecord } from './measure.ts';
 
 /** How many seeds of each scenario are replayed against the recorded data. */
 const SEEDS = 3;
@@ -46,15 +48,26 @@ try {
         fail(`${registry.id} + ${extension}: ${error.message}`);
       }
     }
+    // A behavior set is compiled over the default set, against the ruleset with the extensions it names.
+    for (const set of behaviorSetsOf(ruleset)) {
+      try {
+        const needs = (readYaml(`rulesets/${ruleset}/behaviors/${set}.yaml`) as BehaviorSetDoc).extensions ?? [];
+        const compiled = loadBehaviors(loadRuleset(ruleset, needs), ruleset, set === 'default' ? ['default'] : ['default', set]);
+        ok(`${registry.id} behaviors/${set}${needs.length > 0 ? ` (with ${needs.join(', ')})` : ''}: ${compiled.byName.size} behaviors`);
+      } catch (error) {
+        if (!(error instanceof CompileError)) throw error;
+        fail(`${registry.id} behaviors/${set}: ${error.message}`);
+      }
+    }
   }
 
   console.log('Scenarios');
   let stale = false;
-  for (const { ruleset, scenario, registry, loaded } of scenarios) {
+  for (const { ruleset, scenario, registry, behaviors, loaded } of scenarios) {
     for (let seed = 1; seed <= SEEDS; seed++) {
       const name = `${ruleset}/${scenario} seed ${seed}`;
       try {
-        const { record } = measure(registry, loaded, seed);
+        const { record } = measure(registry, loaded, behaviors, seed);
         const was = recorded.get(`${registry.id}/${record.scenario}/${seed}`);
         if (record.outcome.result === 'limit') fail(`${name}: hit the decision limit without ending`);
         else if (!was) {

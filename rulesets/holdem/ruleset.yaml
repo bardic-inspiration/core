@@ -3,8 +3,8 @@
 # matched. Cards are the integers 0 to 51: rank is `c / 4 + 2` (2 up to the
 # ace at 14) and suit is `c % 4`. There is no deck order to hide: a card is
 # drawn at random from what is left, when it is dealt.
-format: 1
-ruleset: { id: holdem, version: 0.1.0, title: Texas Hold 'Em (no-limit) }
+format: 2
+ruleset: { id: holdem, version: 0.2.0, title: Texas Hold 'Em (no-limit) }
 
 space: { grid: none }
 
@@ -321,36 +321,3 @@ flow:
               - call: bettingRound
       - call: showdown
       - set: { game.street: "'done'" }
-
-behaviors:
-  shark:
-    doc: Tight and aggressive. Calls when the price is right for the hand, and bets strong hands in proportion to the pot.
-    scores:
-      fold: 10
-      check: 20
-      call: >-
-        cel.bind(cost, min(player.chips, game.bet - player.staked), cel.bind(pot, all.player.map(p, p.committed).sum(),
-          player.strength * (pot + cost) >= 110 * cost ? 30 : 0))
-      raise: >-
-        player.strength < 60 ? 0
-          : cel.bind(want, game.bet + floorDiv(all.player.map(p, p.committed).sum() * player.strength, 100),
-              50 - floorDiv(abs(to - want) * 10, max(1, want)))
-
-  station:
-    doc: A calling station. Never folds, and raises only with a monster.
-    scores:
-      fold: 0
-      check: 20
-      call: 30
-      raise: "player.strength >= 90 ? 40 : 0"
-
-  maniac:
-    doc: Loose and aggressive. Raises the minimum with almost anything, and shoves a big hand.
-    scores:
-      fold: "player.strength < 30 && (game.bet - player.staked) * 2 > all.player.map(p, p.committed).sum() ? 25 : 0"
-      check: 5
-      call: 20
-      raise: >-
-        player.strength >= 80 && to == player.staked + player.chips ? 60
-          : player.strength >= 35 && to == game.bet + game.minRaise ? 30
-          : 0

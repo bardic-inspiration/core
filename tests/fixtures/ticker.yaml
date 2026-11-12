@@ -2,7 +2,7 @@
 # new bots, so state grows during play. It has no grid, no turns, and no
 # combat, and is the smallest ruleset with a tick scheduler and the slots and
 # stacking patterns. The full version of the idea is rulesets/junkyard.
-format: 1
+format: 2
 ruleset: { id: ticker, version: 0.1.0 }
 
 uses:
@@ -61,7 +61,3 @@ flow:
               seat: bot.seat
               with: { bot: bot }
               offer: [salvage, split, idle]
-
-behaviors:
-  builder:
-    scores: { split: 3, salvage: 2, idle: 1 }

@@ -4,6 +4,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { parse } from 'yaml';
+import { compileBehaviors, type Behaviors } from './compile/behaviors.ts';
 import { compile } from './compile/resolve.ts';
 import type { Registry } from './compile/program.ts';
 import { loadScenario, type Scenario } from './runtime/scenario.ts';
@@ -23,6 +24,10 @@ export function loadRuleset(name: string, extensions: string[] = []): Registry {
     extensions: extensions.map((file) => readYaml(`rulesets/${name}/extensions/${file}.yaml`)),
   });
 }
+
+/** Compiles behavior sets from `rulesets/<name>/behaviors/` against a registry, merged in the order given. */
+export const loadBehaviors = (registry: Registry, name: string, sets: string[] = ['default']): Behaviors =>
+  compileBehaviors(registry, sets.map((file) => readYaml(`rulesets/${name}/behaviors/${file}.yaml`)));
 
 export const loadScenarioFile = (registry: Registry, name: string, scenario: string): Scenario =>
   loadScenario(registry, readYaml(`rulesets/${name}/scenarios/${scenario}.yaml`));

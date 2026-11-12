@@ -58,9 +58,11 @@ npm run validate
 
 This is the check a pull request must pass, and
 [the workflow](.github/workflows/validate.yml) runs it. It type-checks,
-compiles every ruleset alone and with each of its extensions, loads and plays
-every scenario, compares the play against the recorded matches, and runs the
-tests.
+compiles every ruleset alone and with each of its extensions, compiles every
+behavior set, loads and plays every scenario, compares the play against the
+recorded matches, and runs the tests. One test plays matches in a Web Worker
+in headless Chromium; install the browser once with
+`npx playwright install chromium`.
 
 If a change is meant to alter how a match plays, regenerate the records and
 commit them with it:
@@ -75,10 +77,11 @@ npm run sim
 
 ```
 kit/patterns.yaml        the pattern kit, as data
-rulesets/<id>/           ruleset.yaml, scenarios/, extensions/
+rulesets/<id>/           ruleset.yaml, scenarios/, extensions/, behaviors/
         │
         ▼  compile  (src/compile/)
    Registry              every name resolved, every expression type-checked
+        │                behaviors are compiled against it, apart from it
         │
         ▼  Match    (src/runtime/)
    state + event log     seats choose among enumerated legal intents
@@ -92,10 +95,18 @@ rulesets/<id>/           ruleset.yaml, scenarios/, extensions/
   prompt needs a seat's decision. It enumerates every legal intent for that
   seat; the seat returns one. Every write is an event, and `fold(log)`
   rebuilds the state.
+- **Host.** An engine implements six space functions, drives `advance` and
+  `submit`, and reads the log. Core runs unchanged in a browser worker, can
+  explain a decision, evaluate an expression on any state, and replay or
+  fork a match from its log.
 
 Read next:
 
-- [`docs/format.md`](docs/format.md): the ruleset and scenario format.
+- [`docs/format.md`](docs/format.md): the ruleset, behavior, and scenario
+  format, and the log.
+- [`docs/host.md`](docs/host.md): what an engine implements and calls: the
+  space host's contract, and driving, explaining, replaying, and forking a
+  match.
 - [`DECISIONS.md`](DECISIONS.md): the calls made during the build, including
   answers to the brief's open questions.
 - [`HANDOFF.md`](HANDOFF.md): what works, what is stubbed, where the build
@@ -106,13 +117,14 @@ Read next:
 | Path | What it holds |
 |---|---|
 | [`src/format.ts`](src/format.ts), [`src/schemas.ts`](src/schemas.ts) | The authored document shapes and their JSON Schemas. |
-| [`src/compile/`](src/compile) | Layers and patterns (`layers.ts`), resolution and static checks (`resolve.ts`), the registry's types (`program.ts`). |
+| [`src/compile/`](src/compile) | Layers and patterns (`layers.ts`), resolution and static checks (`resolve.ts`), behavior sets (`behaviors.ts`), the registry's types (`program.ts`). |
 | [`src/lib/functions.ts`](src/lib/functions.ts) | The function library, and the host-function interface for space. |
-| [`src/runtime/`](src/runtime) | State and events, the expression session, the match machine, scenarios, seats, the seeded RNG. |
+| [`src/runtime/`](src/runtime) | State and events, the expression session, the match machine, scenarios, seats, replay and forks, the seeded RNG. |
+| [`src/expression.ts`](src/expression.ts), [`src/record.ts`](src/record.ts) | Free-standing expressions over any state, and a match's record from its log. |
 | [`src/host/grid.ts`](src/host/grid.ts) | A reference space host for headless play. |
 | [`src/load.ts`](src/load.ts) | Reads YAML from disk. Core itself never touches the file system. |
 | [`kit/`](kit), [`rulesets/`](rulesets) | Pure data. |
-| [`scripts/`](scripts) | `play` prints a match, `sim` records matches, `validate` is the pull-request check. |
+| [`scripts/`](scripts) | `play` prints a match, `sim` records matches, `validate` is the pull-request check, `browser` times core in a Web Worker against Node. |
 | [`data/`](data) | One record per recorded match. |
 | [`tests/`](tests) | The conformance tests, and a tick-driven fixture ruleset. |
 

@@ -1,0 +1,39 @@
+# How the junkyard's swarms play.
+format: 2
+behaviorSet: { id: default }
+ruleset: { id: junkyard, version: 0.2.0 }
+
+behaviors:
+  forager:
+    doc: Gathers parts and multiplies. Fights only what stands next to it when there is nothing better to do.
+    scores:
+      salvage: "20 + part.rating + (part.type == 'leg' && bot.mobility == 0 ? 10 : 0)"
+      # Splits when full, and never gives away its last leg.
+      assemble: >-
+        bot.free > 0 ? -1
+          : part.type == 'leg' && bot.mounts.filter(p, p.type == 'leg').size() == 1 ? -1
+          : 12 - part.rating
+      strike: 3
+      move: >-
+        all.pile.size() == 0 ? 0
+          : (all.pile.map(p, distance(bot.pos, p.pos)).min() - all.pile.map(p, distance(to, p.pos)).min()) * 5
+      idle: 1
+
+  raider:
+    doc: Arms itself, hunts the bots of other seats, and picks over what is left of them.
+    scores:
+      strike: "30 + (target.hull == 1 ? 10 : 0) - target.armor"
+      salvage: "20 + part.rating + (part.type == 'arm' && bot.power == 0 ? 10 : 0)"
+      assemble: >-
+        bot.free > 0 ? -1
+          : part.type == 'leg' && bot.mounts.filter(p, p.type == 'leg').size() == 1 ? -1
+          : part.type == 'arm' && bot.mounts.filter(p, p.type == 'arm').size() == 1 ? -1
+          : 12 - part.rating
+      # Armed, it closes on the nearest bot of another seat. Unarmed, it looks for scrap.
+      move: >-
+        cel.bind(prey, all.bot.filter(b, b.seat != bot.seat),
+          bot.power > 0 && prey.size() > 0
+            ? (prey.map(b, distance(bot.pos, b.pos)).min() - prey.map(b, distance(to, b.pos)).min()) * 5
+          : all.pile.size() == 0 ? 0
+          : (all.pile.map(p, distance(bot.pos, p.pos)).min() - all.pile.map(p, distance(to, p.pos)).min()) * 5)
+      idle: 1
