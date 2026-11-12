@@ -59,7 +59,7 @@ npm run validate
 This is the check a pull request must pass, and
 [the workflow](.github/workflows/validate.yml) runs it. It type-checks,
 compiles every ruleset alone and with each of its extensions, compiles every
-behavior set, loads and plays every scenario, compares the play against the
+behavior set, loads every map, loads and plays every scenario, compares the play against the
 recorded matches, and runs the tests. One test plays matches in a Web Worker
 in headless Chromium; install the browser once with
 `npx playwright install chromium`.
@@ -77,7 +77,7 @@ npm run sim
 
 ```
 kit/patterns.yaml        the pattern kit, as data
-rulesets/<id>/           ruleset.yaml, scenarios/, extensions/, behaviors/
+rulesets/<id>/           ruleset.yaml, scenarios/, maps/, extensions/, behaviors/
         │
         ▼  compile  (src/compile/)
    Registry              every name resolved, every expression type-checked
@@ -102,8 +102,8 @@ rulesets/<id>/           ruleset.yaml, scenarios/, extensions/, behaviors/
 
 Read next:
 
-- [`docs/format.md`](docs/format.md): the ruleset, behavior, and scenario
-  format, and the log.
+- [`docs/format.md`](docs/format.md): the ruleset, behavior, map, and
+  scenario format, and the log.
 - [`docs/host.md`](docs/host.md): what an engine implements and calls: the
   space host's contract, and driving, explaining, replaying, and forking a
   match.
@@ -119,7 +119,7 @@ Read next:
 | [`src/format.ts`](src/format.ts), [`src/schemas.ts`](src/schemas.ts) | The authored document shapes and their JSON Schemas. |
 | [`src/compile/`](src/compile) | Layers and patterns (`layers.ts`), resolution and static checks (`resolve.ts`), behavior sets (`behaviors.ts`), the registry's types (`program.ts`). |
 | [`src/lib/functions.ts`](src/lib/functions.ts) | The function library, and the host-function interface for space. |
-| [`src/runtime/`](src/runtime) | State and events, the expression session, the match machine, scenarios, seats, replay and forks, the seeded RNG. |
+| [`src/runtime/`](src/runtime) | State and events, the expression session, the match machine, maps, scenarios, seats, replay and forks, the seeded RNG. |
 | [`src/expression.ts`](src/expression.ts), [`src/record.ts`](src/record.ts) | Free-standing expressions over any state, and a match's record from its log. |
 | [`src/host/grid.ts`](src/host/grid.ts) | A reference space host for headless play. |
 | [`src/load.ts`](src/load.ts) | Reads YAML from disk. Core itself never touches the file system. |

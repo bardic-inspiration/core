@@ -1,16 +1,16 @@
 // The check a pull request must pass, apart from the tests:
 //   1. every ruleset under rulesets/ compiles, alone and with each of its extensions,
 //      and every behavior set compiles against the ruleset it is written for;
-//   2. every scenario loads against its ruleset;
+//   2. every map and every scenario loads against its ruleset;
 //   3. every scenario plays to an end the scenario or the flow declares, and folding its log gives its final state;
 //   4. data/matches.jsonl still matches how the rules play.
 //   npm run validate
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { CompileError } from '../src/index.ts';
+import { CompileError, loadMap } from '../src/index.ts';
 import type { BehaviorSetDoc } from '../src/index.ts';
-import { loadBehaviors, loadRuleset, readYaml } from '../src/load.ts';
+import { loadBehaviors, loadRuleset, readMaps, readYaml } from '../src/load.ts';
 import { behaviorSetsOf, extensionsOf, measure, shipped, type MatchRecord } from './measure.ts';
 
 /** How many seeds of each scenario are replayed against the recorded data. */
@@ -57,6 +57,20 @@ try {
       } catch (error) {
         if (!(error instanceof CompileError)) throw error;
         fail(`${registry.id} behaviors/${set}: ${error.message}`);
+      }
+    }
+  }
+
+  console.log('Maps');
+  for (const ruleset of new Set(scenarios.map((entry) => entry.ruleset))) {
+    const { registry } = scenarios.find((entry) => entry.ruleset === ruleset)!;
+    for (const [id, doc] of Object.entries(readMaps(ruleset))) {
+      try {
+        const map = loadMap(registry, doc);
+        ok(`${registry.id} maps/${id}: ${map.width} by ${map.height}, ${map.cells.length} cells given`);
+      } catch (error) {
+        if (!(error instanceof CompileError)) throw error;
+        fail(`${registry.id} maps/${id}: ${error.message}`);
       }
     }
   }

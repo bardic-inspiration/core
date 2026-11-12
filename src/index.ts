@@ -14,6 +14,7 @@ export { compileExpression } from './expression.ts';
 export type { Expression, ExpressionOptions, EvaluateOptions } from './expression.ts';
 export { loadScenario } from './runtime/scenario.ts';
 export type { Scenario, ScenarioOptions } from './runtime/scenario.ts';
+export { loadMap } from './runtime/map.ts';
 export { Match } from './runtime/match.ts';
 export type {
   Authored, Candidate, Decision, DomainTrace, Explanation, GateResult, IntentExplanation, Option, Seat, SeatRequest, Snapshot,

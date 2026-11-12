@@ -1,6 +1,6 @@
 # The format
 
-How a ruleset, an extension, a behavior set, and a scenario are written. This
+How a ruleset, an extension, a behavior set, a map, and a scenario are written. This
 is format version 2 (`format: 2`); each ruleset carries its own `version`.
 Format 2 moved behaviors out of rulesets and replaced a scenario's list of
 blocked cells with cell layers.
@@ -33,7 +33,11 @@ what it declares.
 | Signal, reaction | `signals`, `reactions` | A named moment, and effects that run when it is emitted. |
 | Procedure | `procedures` | A reusable effect list with params and returns. |
 | Flow | `flow` | The scheduler: the effect list the match runs from the start. |
-| Space | `space` | What is spatially possible, and what each cell holds. |
+| Space | `space` | What is spatially possible, and what each cell holds: the kind of map the ruleset is played on. |
+
+A map, the playing environment itself, is not part of a ruleset either. The
+ruleset's `space` says what a map is made of, and a map is a document that
+fills one in ([Maps](#maps)).
 
 Behaviors, the utility scores an AI seat chooses by, are not part of a
 ruleset. They are a document of their own, compiled against it
@@ -249,7 +253,7 @@ A behavior set is its own document, kept apart from the rules it plays:
 ```yaml
 format: 2
 behaviorSet: { id: default }
-ruleset: { id: dnd-5e-2024-slice, version: 0.3.0 }
+ruleset: { id: dnd-5e-2024-slice, version: 0.4.0 }
 behaviors:
   skirmisher:
     scores:
@@ -290,6 +294,7 @@ and `cast: *spellValue`). YAML merge keys (`<<`) are not read.
 space:
   grid: square
   adjacency: 8
+  corners: closed
   unit: 5
   increment: 5
   layers:
@@ -301,21 +306,66 @@ space:
 
 Core declares the rules of space; positions are ordinary `cell` fields, and
 geometry is the host's. A ruleset may fix `width` and `height`; otherwise the
-scenario gives them.
+map gives them.
+
+`adjacency` says whether a diagonal step is a step (8) or not (4). With
+`corners: closed`, a diagonal step may not pass the corner of a cell that
+blocks movement: it is not among `neighbors`. The default is `open`.
 
 `layers` declares what every cell holds: a typed attribute (`int`, `number`,
-`bool`, `string`, or an enum) with the value of a cell the scenario says
+`bool`, `string`, or an enum) with the value of a cell the map says
 nothing about. A rule reads a cell with `cellAt(c)`: `cellAt(to).cover`. The
 layers are its members, so a misspelt layer or a wrongly typed comparison
 fails the build. `cellAt` of a cell off the map is an error.
 
 `blocksMove` and `blocksSight` are the two rules the host respects. Each is a
 bool expression over `cell`, one cell's layer values (and `tables`); it
-cannot read the match. Core works them out for every cell when a scenario
+cannot read the match. Core works them out for every cell when a map
 loads and hands the host the answer, so the host itself evaluates nothing.
 Nothing can be in a cell that blocks movement: it is not `inBounds`, and
 `neighbors` and `cellsWithin` leave it out. A cell that blocks sight breaks a
 `lineOfSight` that crosses it.
+
+## Maps
+
+A map is one playing environment for a ruleset: a size, and a value for every
+cell. It is a document of its own, so several scenarios can be played on one
+map, and a map can be drawn, changed, or swapped without touching who stands
+on it.
+
+```yaml
+format: 2
+map: { id: rocky-pass, title: Rocky pass }
+ruleset: { id: dnd-5e-2024-slice, version: 0.4.0 }
+legend:
+  '.': {}                        # every layer at its default
+  '#': { terrain: rock }
+  '"': { terrain: difficult }
+rows:
+  - '......#...'
+  - '..""..#...'
+  - '..""......'
+cells:
+  - { at: [9, 2], terrain: rock }   # one cell; overrides the picture
+```
+
+`rows` is the map as a picture: one string per row, one symbol per cell. The
+first row is `y = 0` and the first symbol of a row is `x = 0`, so the picture
+reads as the grid is addressed. `legend` says what each symbol holds: any of
+the ruleset's layers, the rest keeping their defaults. A symbol is one
+character. `cells` lists single cells, as `{ at: [x, y], <layer>: <value> }`,
+and wins over the picture. A map without a picture gives `width`, `height`,
+and `cells`.
+
+`loadMap(registry, doc)` checks a map against a compiled ruleset and returns
+it as the plain data a host is given ([`host.md`](host.md#the-map)). Refused:
+rows of different widths, a symbol not in the legend, a size that disagrees
+with the picture or with a size the ruleset fixes, a cell off the map or
+given twice, an undeclared layer, and a value of the wrong type.
+
+What a cell's values mean is the ruleset's. The 5e slice gives each square a
+`terrain`; its `space` says rock blocks movement and sight, and its `move`
+intent charges what the table `squareCost` says the square costs to enter.
 
 ## Patterns
 
@@ -354,15 +404,11 @@ extends, and holds the same sections as a ruleset
 ```yaml
 format: 2
 scenario: { id: worg-vs-scout }
-ruleset: { id: dnd-5e-2024-slice, version: 0.3.0 }
+ruleset: { id: dnd-5e-2024-slice, version: 0.4.0 }
 seats:
   wild: { behavior: hunter }
   referee: { referee: true }
-space:
-  width: 24
-  height: 12
-  cells:
-    - { at: [11, 3], terrain: rock }      # one cell's layer values; the rest keep the defaults
+map: rocky-pass                           # a map document, by id
 entities:
   - { id: worg, kind: creature, fields: { ..., pos: [2, 6] } }
 links:
@@ -372,9 +418,12 @@ end:
     outcome: { result: "'win'", winner: "'monsters'" }
 ```
 
-`space.cells` holds the map's values: each entry names a cell with `at` and
-gives any of the ruleset's layers. A cell off the map, a cell given twice, an
-undeclared layer, and a value of the wrong type are all refused.
+`map` names the map the scenario is played on; the caller gives the map
+documents (`loadScenario(registry, doc, { maps })`, by id). A scenario may
+write a map inline instead, as `space: { width, height, cells }`, with
+`cells` as in a map document. It gives one or the other. A ruleset that
+fixes its grid's size and holds nothing in its cells, as checkers does,
+needs neither.
 
 End conditions belong to the scenario. They are checked after every write a
 rule makes; the first that holds ends the match with its outcome. A match

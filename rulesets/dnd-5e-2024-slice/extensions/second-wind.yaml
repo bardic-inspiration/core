@@ -4,7 +4,7 @@
 # AI seats use it are a behavior set of their own (behaviors/second-wind.yaml).
 format: 2
 extension: { id: second-wind, version: 0.1.0, title: Second Wind for everyone }
-extends: { id: dnd-5e-2024-slice, version: 0.3.0 }
+extends: { id: dnd-5e-2024-slice, version: 0.4.0 }
 
 kinds:
   creature:

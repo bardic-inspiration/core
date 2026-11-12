@@ -10,6 +10,8 @@ export interface Job {
   ruleset: unknown;
   behaviors: unknown[];
   scenario: unknown;
+  /** The ruleset's map documents, by id. */
+  maps?: Record<string, unknown>;
   seeds: number[];
 }
 
@@ -23,7 +25,7 @@ export function runJob(job: Job): JobResult {
   const started = performance.now();
   const registry = compile({ kit: job.kit, base: job.ruleset });
   const behaviors = compileBehaviors(registry, job.behaviors);
-  const scenario = loadScenario(registry, job.scenario);
+  const scenario = loadScenario(registry, job.scenario, { maps: job.maps });
   const compileMs = performance.now() - started;
   const matches = job.seeds.map((seed) => {
     const before = performance.now();

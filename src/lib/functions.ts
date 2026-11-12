@@ -28,9 +28,13 @@ export type CellValues = Record<string, number | boolean | string>;
  * evaluates a rule.
  */
 export interface SpaceMap {
+  /** The map document's id; absent when the map was written inline in a scenario. */
+  id?: string;
   grid: 'square';
   /** Whether diagonal neighbours are adjacent (8) or not (4). */
   adjacency: 4 | 8;
+  /** `closed`: a diagonal step past the corner of a cell that blocks movement is not a step to a neighbour. */
+  corners: 'open' | 'closed';
   /** Game units per cell. Distances and ranges are in these units. */
   unit: number;
   width: number;
@@ -56,7 +60,7 @@ export interface SpaceHost {
   inBounds(cell: Point): boolean;
   /** The distance between two cells in game units, by the grid's adjacency. Ignores what lies between. */
   distance(a: Point, b: Point): number;
-  /** The in-bounds cells adjacent to `cell`, without `cell` itself, in row order. */
+  /** The in-bounds cells adjacent to `cell`, without `cell` itself, in row order. With closed corners, a diagonal past a blocking cell is left out. */
   neighbors(cell: Point): Point[];
   /** The in-bounds cells at most `range` game units from `cell`, itself included when in bounds, in row order. */
   cellsWithin(cell: Point, range: number): Point[];

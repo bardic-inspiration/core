@@ -2,7 +2,7 @@
 # intents, with goals that scale them. The rules never read these.
 format: 2
 behaviorSet: { id: default }
-ruleset: { id: dnd-5e-2024-slice, version: 0.3.0 }
+ruleset: { id: dnd-5e-2024-slice, version: 0.4.0 }
 
 behaviors:
   hunter:

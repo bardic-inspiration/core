@@ -61,7 +61,7 @@ const body = {
   enums: named({ type: 'array', items: { type: 'string', pattern: '^[A-Za-z0-9_./-]+$' }, minItems: 1, uniqueItems: true }),
   tables: named({}),
   space: closed({
-    grid: { enum: ['square', 'none'] }, adjacency: { enum: [4, 8] },
+    grid: { enum: ['square', 'none'] }, adjacency: { enum: [4, 8] }, corners: { enum: ['open', 'closed'] },
     unit: { type: 'integer', minimum: 1 }, increment: { type: 'integer', minimum: 1 },
     vertical: { type: 'boolean' }, width: { type: 'integer', minimum: 1 }, height: { type: 'integer', minimum: 1 },
     layers: named(closed({ type: { type: 'string' }, default: {}, doc: { type: 'string' } }, ['type', 'default'])),
@@ -143,6 +143,26 @@ const behaviorSetSchema = closed({
   behaviors: named(behavior),
 }, ['format', 'behaviorSet', 'ruleset', 'behaviors']);
 
+const cells = {
+  type: 'array',
+  items: {
+    type: 'object', required: ['at'], propertyNames: { pattern: NAME },
+    properties: { at: { type: 'array', items: { type: 'integer' }, minItems: 2, maxItems: 2 } },
+  },
+};
+const id = { type: 'string', pattern: '^[a-z0-9][a-z0-9-]*$' };
+
+const mapSchema = closed({
+  format: { type: 'integer' },
+  map: closed({ id, title: { type: 'string' } }, ['id']),
+  ruleset: closed({ id: { type: 'string' }, version }, ['id', 'version']),
+  width: { type: 'integer', minimum: 1 }, height: { type: 'integer', minimum: 1 },
+  // A symbol is one character; what it holds is checked against the ruleset's layers.
+  legend: { type: 'object', minProperties: 1, propertyNames: { pattern: '^.$' }, additionalProperties: { type: 'object', propertyNames: { pattern: NAME } } },
+  rows: { type: 'array', minItems: 1, items: { type: 'string', minLength: 1 } },
+  cells,
+}, ['format', 'map', 'ruleset']);
+
 const scenarioSchema = closed({
   format: { type: 'integer' },
   scenario: closed({ id: { type: 'string' }, title: { type: 'string' } }, ['id']),
@@ -151,16 +171,8 @@ const scenarioSchema = closed({
     type: 'object', minProperties: 1, propertyNames: { pattern: NAME },
     additionalProperties: closed({ behavior: name, referee: { type: 'boolean' } }),
   },
-  space: closed({
-    width: { type: 'integer', minimum: 1 }, height: { type: 'integer', minimum: 1 },
-    cells: {
-      type: 'array',
-      items: {
-        type: 'object', required: ['at'], propertyNames: { pattern: NAME },
-        properties: { at: { type: 'array', items: { type: 'integer' }, minItems: 2, maxItems: 2 } },
-      },
-    },
-  }, ['width', 'height']),
+  map: id,
+  space: closed({ width: { type: 'integer', minimum: 1 }, height: { type: 'integer', minimum: 1 }, cells }, ['width', 'height']),
   game: { type: 'object' },
   entities: {
     type: 'array',
@@ -173,11 +185,12 @@ const scenarioSchema = closed({
 
 const ajv = new Ajv({ allErrors: true, allowUnionTypes: true, strict: false });
 
-export const validators: Record<'ruleset' | 'extension' | 'kit' | 'behaviorSet' | 'scenario', ValidateFunction> = {
+export const validators: Record<'ruleset' | 'extension' | 'kit' | 'behaviorSet' | 'map' | 'scenario', ValidateFunction> = {
   ruleset: ajv.compile(rulesetSchema),
   extension: ajv.compile(extensionSchema),
   kit: ajv.compile(kitSchema),
   behaviorSet: ajv.compile(behaviorSetSchema),
+  map: ajv.compile(mapSchema),
   scenario: ajv.compile(scenarioSchema),
 };
 

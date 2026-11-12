@@ -54,7 +54,7 @@ describe('function library', () => {
 describe('reference grid host', () => {
   const wall = { x: 2, y: 1 };
   const map: SpaceMap = {
-    grid: 'square', adjacency: 8, unit: 5, width: 6, height: 4,
+    grid: 'square', adjacency: 8, corners: 'open', unit: 5, width: 6, height: 4,
     defaults: { terrain: 'open' }, cells: [{ ...wall, values: { terrain: 'wall' } }], blocksMove: [wall], blocksSight: [wall],
   };
   const host = createGridHost(map);

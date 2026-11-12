@@ -15,7 +15,7 @@
 # ("SRD 5.2") by Wizards of the Coast LLC, available at
 # https://www.dndbeyond.com/srd. The SRD 5.2 is licensed under CC-BY-4.0.
 format: 2
-ruleset: { id: dnd-5e-2024-slice, version: 0.3.0, title: D&D 5e (SRD 5.2) combat slice }
+ruleset: { id: dnd-5e-2024-slice, version: 0.4.0, title: D&D 5e (SRD 5.2) combat slice }
 
 # What homebrew may change. `x.+` allows additions directly under x and
 # nothing else, so homebrew can add kinds, fields, intents, signals, tables,
@@ -58,7 +58,8 @@ uses:
     with: { kind: creature, name: speedNow, base: self.speed, source: "self.effects.map(e, e.speedBonus)", rule: sum }
 
 enums:
-  terrain: [open, rock]
+  # What fills a 5-foot square. Rock stands for anything that fills its space: a wall, a boulder, a large tree.
+  terrain: [open, difficult, rock]
   ability: [str, dex, con, int, wis, cha]
   size: [tiny, small, medium, large, huge, gargantuan]
   damageType: [bludgeoning, piercing, slashing, fire, cold, force, radiant]
@@ -72,6 +73,8 @@ enums:
 tables:
   # Hit Die by creature size.
   hitDie: { tiny: 4, small: 6, medium: 8, large: 10, huge: 12, gargantuan: 20 }
+  # Feet of movement it costs to enter a square. Difficult Terrain costs 1 extra foot per foot. Rock is never entered.
+  squareCost: { open: 5, difficult: 10, rock: 0 }
   sizeRank: { tiny: 0, small: 1, medium: 2, large: 3, huge: 4, gargantuan: 5 }
   # Proficiency Bonus by Challenge Rating.
   proficiencyByCr:
@@ -79,11 +82,14 @@ tables:
       "9": 4, "10": 4, "11": 4, "12": 4, "13": 5, "14": 5, "15": 5, "16": 5, "17": 6, "18": 6, "19": 6, "20": 6,
       "21": 7, "22": 7, "23": 7, "24": 7, "25": 8, "26": 8, "27": 8, "28": 8, "29": 9, "30": 9 }
 
-# Each cell has a terrain. Rock cannot be entered or seen through; the host
-# works movement and line of sight out from these two rules.
+# The map: a grid of 5-foot squares, each with a terrain. A diagonal step
+# costs the same as any other, but cannot cross the corner of a square that is
+# filled. Rock cannot be entered or seen through; the host works movement and
+# line of sight out from these two rules. A map is a document under maps/.
 space:
   grid: square
   adjacency: 8
+  corners: closed
   unit: 5
   increment: 5
   layers:
@@ -555,13 +561,15 @@ procedures:
 
 intents:
   move:
-    doc: Move one square. Leaving an enemy's reach gives it an Opportunity Attack first, unless the mover has Disengaged.
+    doc: >-
+      Move one square, paying what the square costs to enter. Leaving an enemy's reach gives it an Opportunity Attack
+      first, unless the mover has Disengaged.
     params:
       actor: creature
       to: { type: cell, in: "neighbors(actor.pos)" }
     gate:
       - "actor.able && !actor.prone"
-      - "actor.movement >= 5"
+      - "actor.movement >= tables.squareCost[cellAt(to).terrain]"
       - "!all.creature.exists(c, !c.defeated && c.pos == to)"
     effects:
       - each: foe
@@ -577,7 +585,7 @@ intents:
                   offer: [reaction]
       - if: "!actor.defeated"
         then:
-          - set: { actor.pos: to, actor.movement: "actor.movement - 5" }
+          - set: { actor.pos: to, actor.movement: "actor.movement - tables.squareCost[cellAt(to).terrain]" }
 
   attack:
     doc: Attack with a wielded weapon. The first attack of a turn spends the action.

@@ -452,3 +452,56 @@ is 2 and a format 1 file is refused by name, not by an unknown key. The
 recorded matches were regenerated because the log gained `cause`, `of`,
 `rng`, and the seed. Before regenerating, all 240 were played and compared
 with those fields left out: the logs and records were identical.
+
+## 2026-11-12: maps
+
+A first pass at the playing environment as a thing of its own, starting with
+the 5e slice's square grid.
+
+**D58. A map is a document, and `space` is its kind.** The ruleset's `space`
+already said what a map is made of: the grid, the layers each cell holds,
+and what blocks. What was missing was the map itself, which lived inside
+each scenario. It is now a document of its own (`map:`, under
+`rulesets/<id>/maps/`), checked against the ruleset by `loadMap` and named
+by a scenario with `map: <id>`. Why a document and not an entity kind: a
+map is not in the state or the log (D52), nothing in a rule writes it yet,
+and the studio needs to draw and paint one before any match exists.
+`space` kept its name; renaming it to `map` would have broken every ruleset
+for no change in what it says. The format stays 2, since nothing written
+before is refused.
+
+**D59. A map is drawn as a picture.** `rows` is one string per row and
+`legend` says what each symbol holds; `cells` lists single cells and wins
+over the picture. Why: a square grid is read and reviewed far more easily
+as a picture than as a list of coordinates, and a diff of one shows what
+moved. The first row is `y = 0`, so the picture is addressed as the grid is.
+The legend belongs to the map and not to the ruleset, so a ruleset stays
+free of presentation.
+
+**D60. A scenario names a map or writes one inline, not both.** The inline
+`space` stays: a test, or a board with nothing on it, should not need a
+second file. `loadScenario` is given the map documents by id, as plain
+data, so core still reads no files.
+
+**D61. Corners are the host's, declared by the ruleset.** `space.corners:
+closed` says a diagonal step may not pass the corner of a cell that blocks
+movement, as 5e rules for a feature that fills its square. It is in the
+host contract because `neighbors` is the host's answer, and a host that cut
+corners would play different matches. Only `neighbors` changes. `distance`
+and `cellsWithin` are not path lengths (D22) and still count by the
+shortest route, which is also how 5e counts range on a grid. The default is
+`open`, so the other rulesets play as before.
+
+**D62. Terrain is an enum with tables, not a kind of entity.** The 5e
+slice's `terrain` is `open`, `difficult`, or `rock`, and a table,
+`squareCost`, gives the feet of movement each costs to enter. `move` reads
+it through `cellAt`. Why not a `terrain` kind with instances: a cell layer
+holds a plain value (D52), and a table keyed by the enum says the same with
+what the format already has. An extension may add tables but not terrains;
+opening `enums.terrain` waits until an extension needs it.
+
+**D63. The 5e slice is 0.4.0, and the pack ambush is played on a map.** Its
+five boulders moved to `maps/rocky-pass.yaml` with patches of Difficult
+Terrain added, so the 40 recorded pack-ambush matches changed and were
+regenerated. The other 5e records changed only in `version`: their logs are
+the same.

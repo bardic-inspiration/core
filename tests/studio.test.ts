@@ -83,7 +83,7 @@ describe('behaviors as their own layer', () => {
     const dnd = loadRuleset('dnd-5e-2024-slice');
     const fight = loadScenarioFile(dnd, 'dnd-5e-2024-slice', 'worg-vs-scout');
     const rooted = {
-      format: 2, behaviorSet: { id: 'rooted' }, ruleset: { id: 'dnd-5e-2024-slice', version: '0.3.0' },
+      format: 2, behaviorSet: { id: 'rooted' }, ruleset: { id: 'dnd-5e-2024-slice', version: '0.4.0' },
       behaviors: { hunter: { scores: { move: -1000, dash: -1000 } } },
     };
     const varied = compileBehaviors(dnd, [readYaml('rulesets/dnd-5e-2024-slice/behaviors/default.yaml'), rooted]);
@@ -172,7 +172,7 @@ describe('cell layers', () => {
 
   it('works the map out from the ruleset\'s space rules and the scenario\'s cells', () => {
     expect(board.map).toEqual({
-      grid: 'square', adjacency: 4, unit: 5, width: 3, height: 3,
+      grid: 'square', adjacency: 4, corners: 'open', unit: 5, width: 3, height: 3,
       defaults: { terrain: 'open', height: 0 },
       cells: [
         { x: 1, y: 0, values: { terrain: 'wall', height: 0 } },

@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { Match, type Decision } from '../src/index.ts';
-import { loadRuleset, loadScenarioFile, readYaml } from '../src/load.ts';
+import { loadRuleset, loadScenarioFile, readMaps, readYaml } from '../src/load.ts';
 import { behaviorsFor, findSeed, loadScenario, play, read as readState } from './helpers.ts';
 
 const registry = loadRuleset('dnd-5e-2024-slice');
@@ -14,7 +14,7 @@ const shipped = loadScenarioFile(registry, 'dnd-5e-2024-slice', 'pack-ambush');
 const arranged = (positions: Record<string, [number, number]>) => {
   const doc = readYaml('rulesets/dnd-5e-2024-slice/scenarios/pack-ambush.yaml') as any;
   for (const entity of doc.entities) if (entity.id in positions) entity.fields.pos = positions[entity.id];
-  return loadScenario(registry, doc);
+  return loadScenario(registry, doc, { maps: readMaps('dnd-5e-2024-slice') });
 };
 
 /** Passes every decision until `actor` has its turn, and returns that decision. */

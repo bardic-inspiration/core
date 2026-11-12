@@ -9,7 +9,7 @@
 # as two level 1 slots, where the stat block gives uses per day.
 format: 2
 scenario: { id: pack-ambush, title: Pack ambush }
-ruleset: { id: dnd-5e-2024-slice, version: 0.3.0 }
+ruleset: { id: dnd-5e-2024-slice, version: 0.4.0 }
 
 seats:
   vanguard: { behavior: defender }
@@ -20,16 +20,8 @@ seats:
   goblins: { behavior: sniper }
   referee: { referee: true }
 
-space:
-  width: 26
-  height: 14
-  # Boulders that block movement and line of sight.
-  cells:
-    - { at: [11, 3], terrain: rock }
-    - { at: [11, 4], terrain: rock }
-    - { at: [12, 9], terrain: rock }
-    - { at: [12, 10], terrain: rock }
-    - { at: [16, 6], terrain: rock }
+# Boulders that block movement and line of sight, and scrub that slows: maps/rocky-pass.yaml.
+map: rocky-pass
 
 entities:
   # The patrol.

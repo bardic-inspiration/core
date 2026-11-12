@@ -1,0 +1,24 @@
+# A pass between boulders, with patches of scrub. 26 by 14 squares of 5 feet.
+# The first row is y = 0, and the first symbol of a row is x = 0.
+format: 2
+map: { id: rocky-pass, title: Rocky pass }
+ruleset: { id: dnd-5e-2024-slice, version: 0.4.0 }
+legend:
+  '.': {}
+  '#': { terrain: rock }         # a boulder: blocks movement and line of sight
+  '"': { terrain: difficult }    # scrub: Difficult Terrain
+rows:
+  - '..........................'
+  - '..........................'
+  - '..............""..........'
+  - '...........#..."..........'
+  - '...........#..............'
+  - '............."""..........'
+  - '............."""#.........'
+  - '............."""..........'
+  - '............."""..........'
+  - '............#.............'
+  - '........."".#.............'
+  - '.........""...............'
+  - '.........."...............'
+  - '..........................'

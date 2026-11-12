@@ -8,7 +8,7 @@ calls is in [`docs/host.md`](docs/host.md).
 
 ## What works
 
-Everything below is exercised by `npm run validate` (388 tests, and every
+Everything below is exercised by `npm run validate` (420 tests, and every
 shipped scenario played).
 
 - **The format and compiler.** YAML rulesets are schema-checked, patterns are
@@ -84,6 +84,24 @@ gained fields, so every `logHash` changed and the records were regenerated.
 With the new fields left out, all 240 recorded matches play out exactly as
 they did before: same logs, same records.
 
+### Maps
+
+A first pass at the playing environment (D58 to D63), after the studio
+groundwork.
+
+- **A map is its own document.** `rulesets/<id>/maps/<id>.yaml` holds a
+  size and the cells' values, drawn as a picture with a legend. `loadMap`
+  checks it against the ruleset's `space` and returns what a host is given;
+  a scenario names it with `map: <id>`. The inline `space` still works.
+- **The 5e square grid.** 5-foot squares, a diagonal at the cost of any
+  other step, closed corners (`space.corners`, a new part of the host
+  contract), and Difficult Terrain at 10 feet a square. The pack ambush is
+  played on `maps/rocky-pass.yaml`.
+- **Not yet:** cover from what stands between two squares, obscured areas,
+  creatures larger than one square, and a map a rule can change. The grid
+  rules were written from the 2024 rules' "Playing on a Grid" and have not
+  been checked against ttrpg-library.
+
 ### Core in a Web Worker against Node
 
 Seeds 1 to 10 of each scenario, on one machine (Node 22.23, Chromium 153):
@@ -140,7 +158,7 @@ computed map key (D34), and one list function (D35).
 |---|---|---|---|---|---|
 | checkers/standard | red 22, black 16, draw 2 | 73 | 5.1, 16 | 227 | 46 |
 | 5e/worg-vs-scout | monsters 27, adventurers 13 | 37 | 9.5, 12 | 199 | 18 |
-| 5e/pack-ambush | monsters 22, adventurers 18 | 164 | 9.9, 20 | 962 | 115 |
+| 5e/pack-ambush | monsters 25, adventurers 15 | 169 | 9.6, 20 | 980 | 114 |
 | 5e/mage-duel | red 25, blue 15 | 88 | 62.3, 334 | 615 | 107 |
 | holdem/four-handed | shark 19, random 8, station 7, maniac 6 | 109 | 4.6, 6 | 1,474 | 68 |
 | junkyard/yard | census (11 bots on average) | 584 | 8.1, 41 | 2,642 | 346 |
