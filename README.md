@@ -1,4 +1,4 @@
-# rpg-core
+# core
 
 A ludematic core: a format that expresses a game's ruleset as pure data, and
 one generic runtime that plays any ruleset written in it. The brief is
