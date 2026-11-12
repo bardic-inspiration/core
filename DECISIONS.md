@@ -505,3 +505,57 @@ five boulders moved to `maps/rocky-pass.yaml` with patches of Difficult
 Terrain added, so the 40 recorded pack-ambush matches changed and were
 regenerated. The other 5e records changed only in `version`: their logs are
 the same.
+
+### Where maps go next
+
+Agreed after the first pass, and not built. D64 to D69 are the plan; the
+order is in `HANDOFF.md`.
+
+**D64. A map is a bounded plane, and a grid is one expression of rules over
+it. (reframes D58)** The plane has an extent and a unit of measure, and
+needs nothing else. A grid is a ruleset's rule: it divides the plane into
+cells, snaps positions to them, and defines adjacency and step distance.
+Everything cell-shaped (layers, the picture and its legend, the blocking
+rules, corners) belongs to the grid. "No grid" must stop meaning "no
+space": a ruleset can have a map without one, as a poker table is.
+
+**D65. A ruleset says what its maps can be.** Two sets of criteria, both
+checked by `loadMap`: on the plane (bounds on the extent, places a map must
+have) and on the grid (checks over one cell's values). Criteria over the
+whole map that need a path, such as "every area can be reached", are left
+out until something needs them.
+
+**D66. A scenario imports a map, writes one inline, or takes the ruleset's
+standard map. (extends D60)** Importing is the option that keeps a map
+apart from the scenarios played on it; inline stays for the cases where
+that does not matter. A ruleset may ship a standard map, used by a scenario
+that says nothing, and may declare it the only one allowed. Checkers would
+do that in place of the fixed `width` and `height` in its `space`, and
+hold 'em would get a table.
+
+**D67. Whether play can change the map is declared by layer, not by one
+mode.** A layer is fixed unless the ruleset says `mutable`, and a rule that
+writes a fixed layer is refused at compile time. Why by layer: "to what
+extent" is then the same declaration as "whether", and a ruleset with no
+mutable layer is the classic fixed map with objects on it, at no cost. A
+mutable layer also closes a gap: the blocking rules read one cell's values
+and never the match (D52), so a door that is an entity cannot block sight,
+and a door that is a layer value can.
+
+**D68. A map document is never state. A match holds an overlay.** A write
+to a mutable layer is a log event, and state holds only the places the
+match has changed; the ground at any moment is the map with the overlay
+laid on it. Why: two scenarios on one map must not reach each other, and
+`fold`, replay, and forks must keep working from the log alone. The
+overlay is addressed by place, not by cell, so a ruleset without a grid
+needs no second mechanism. The host stays a pure function of a map: core
+works out the blocking for changed cells and hands the host the patched
+map, and never pushes changes into a host that keeps state.
+
+**D69. Named places are content every map can have.** A point or an area
+with a name, on the plane, with or without a grid. A scenario can then say
+where something stands by name, and a map with no grid has something to
+hold. Not in this pass: play on a plane without a grid (free positions,
+straight-line distance, shapes that block), which is a second set of
+questions for the host; cells hidden from some seats; and a map that
+changes size during play.

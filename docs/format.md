@@ -304,8 +304,9 @@ space:
   blocksSight: "cell.terrain == 'rock' || cell.cover >= 3"
 ```
 
-Core declares the rules of space; positions are ordinary `cell` fields, and
-geometry is the host's. A ruleset may fix `width` and `height`; otherwise the
+`space` says what a map of this ruleset can be, and the rules the host
+respects on it. Core declares those rules; positions are ordinary `cell`
+fields, and geometry is the host's. A ruleset may fix `width` and `height`; otherwise the
 map gives them.
 
 `adjacency` says whether a diagonal step is a step (8) or not (4). With
@@ -328,8 +329,14 @@ Nothing can be in a cell that blocks movement: it is not `inBounds`, and
 
 ## Maps
 
-A map is one playing environment for a ruleset: a size, and a value for every
-cell. It is a document of its own, so several scenarios can be played on one
+A map is one playing environment for a ruleset. In the model it is a bounded
+plane, and a grid is one set of rules a ruleset may lay over it: the grid
+divides the plane into cells, and a cell is an address for a patch of it.
+The square grid is the only expression built so far, so a map today is a
+size in cells and a value for every cell. Cells, layers, and the picture
+below belong to the grid, not to the map as such.
+
+A map is a document of its own, so several scenarios can be played on one
 map, and a map can be drawn, changed, or swapped without touching who stands
 on it.
 

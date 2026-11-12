@@ -102,6 +102,23 @@ groundwork.
   rules were written from the 2024 rules' "Playing on a Grid" and have not
   been checked against ttrpg-library.
 
+**The plan from here** (D64 to D69, agreed and not built). A map is a
+bounded plane; the square grid is one expression of rules over it, and the
+only one built. In order:
+
+1. **Map criteria in the ruleset**: bounds on the extent, and checks over a
+   cell's values, enforced by `loadMap`.
+2. **Standard maps**: a ruleset ships one, a scenario that names none gets
+   it, and a ruleset may allow no other. Move checkers onto one. Separate
+   "no grid" from "no space", add named places, and give hold 'em a table.
+3. **Mutable layers**: `mutable` on a layer, a write to a cell as a log
+   event, and the overlay in state. The host is handed the patched map.
+   Prove it in the 5e slice with one layer and one rule that writes it,
+   and with replay and fork tests.
+
+Steps 1 and 2 are small and independent. Step 3 is one piece of work, it
+changes the host contract, and it carries the risk.
+
 ### Core in a Web Worker against Node
 
 Seeds 1 to 10 of each scenario, on one machine (Node 22.23, Chromium 153):
@@ -236,6 +253,7 @@ Suggested order.
 8. **Analyse the data.** Vary one behavior or one stat at a time with
    `npm run sim -- --only` and compare outcomes; the records are built for
    that.
-9. **The studio** (the engine's first form): implement `SpaceHost` to
+9. **Maps**: the plan under [Maps](#maps) above.
+10. **The studio** (the engine's first form): implement `SpaceHost` to
    `docs/host.md`, run matches in workers, and render from the event log's
    tree. Its design is in the `space` repository.
