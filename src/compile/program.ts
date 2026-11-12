@@ -22,6 +22,8 @@ export interface FieldSpec {
   type: ValueType;
   default?: Value;
   init?: Compiled;
+  /** Who may see the value; absent when every seat may. */
+  visible?: Compiled;
 }
 
 export interface DerivedSpec {
@@ -58,6 +60,8 @@ export interface SetTarget {
   owner: string;
   field: string;
   key?: string;
+  /** A map key computed when the write runs (`owner.field[expr]`). */
+  index?: Compiled;
   type: ValueType;
 }
 
@@ -142,6 +146,8 @@ export interface Registry {
   compileGlobal(source: string | number | boolean, path: string, issues: { path: string; message: string }[]): Compiled;
   /** The variables every expression sees (`game`, `all`, `space`, `tables`, `seats`), bound to a session. */
   globalsFor(session: Session): Record<string, unknown>;
+  /** True when any field or global declares `visible`, so seats need filtered views. */
+  secrets: boolean;
   /** The session whose expression is being evaluated; host functions read it. */
   active: Session | null;
 }

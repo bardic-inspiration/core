@@ -1,0 +1,356 @@
+# No-limit Texas Hold 'Em. A game of hidden information and a scheduler that
+# is neither rounds nor ticks: a betting round goes on until every bet is
+# matched. Cards are the integers 0 to 51: rank is `c / 4 + 2` (2 up to the
+# ace at 14) and suit is `c % 4`. There is no deck order to hide: a card is
+# drawn at random from what is left, when it is dealt.
+format: 1
+ruleset: { id: holdem, version: 0.1.0, title: Texas Hold 'Em (no-limit) }
+
+space: { grid: none }
+
+enums:
+  street: [preflop, flop, turn, river, showdown, done]
+
+tables:
+  # Place values that pack a hand's five tie-breakers into one number, base 15.
+  place: [50625, 3375, 225, 15, 1]
+  category: [high card, pair, two pair, three of a kind, straight, flush, full house, four of a kind, straight flush]
+
+globals:
+  smallBlind: int
+  bigBlind: int
+  hand: { type: int, default: 0, doc: Hands dealt so far. }
+  button: { type: int, default: -1, doc: The chair of the dealer button. }
+  street: { type: street, default: done }
+  board: { type: list<int>, default: [] }
+  deck: { type: list<int>, default: [], visible: false, doc: "The cards not yet dealt. No seat sees it: it would give away the hole cards." }
+  bet: { type: int, default: 0, doc: What each player must have staked this street to stay in. }
+  minRaise: { type: int, default: 0, doc: The size of the last full raise; a raise must be at least as big. }
+  last: { type: int, default: 0, doc: The chair that acted last; play passes to its left. }
+
+kinds:
+  player:
+    fields:
+      seat: seat
+      chair: { type: int, doc: "Position at the table, clockwise from 0." }
+      chips: int
+      hole:
+        type: list<int>
+        default: []
+        # A player sees their own cards. Everyone sees them at a showdown, unless the hand was folded.
+        visible: "viewer == self.seat || (game.street == 'showdown' && !self.folded)"
+      staked: { type: int, default: 0, doc: Chips put in on this street. }
+      committed: { type: int, default: 0, doc: "Chips put in on this hand and not yet awarded." }
+      folded: { type: bool, default: false }
+      acted: { type: bool, default: false, doc: Has acted since the last full raise. }
+    derived:
+      canAct: { type: bool, value: "!self.folded && self.chips > 0" }
+      cards: { type: list<int>, value: "self.hole + game.board" }
+      counts:
+        type: list<int>
+        doc: How many cards of each rank are held, indexed by rank (2 to 14).
+        value: "range(15).map(r, self.cards.filter(c, c / 4 + 2 == r).size())"
+      groups:
+        type: list<int>
+        doc: The ranks held, the most copies first and then the highest, padded with zeros.
+        value: >-
+          cel.bind(held, range(15).filter(r, self.counts[r] > 0),
+            sortBy(held, held.map(r, -(self.counts[r] * 100 + r))) + [0, 0, 0, 0, 0])
+      flush:
+        type: list<int>
+        doc: The ranks in a suit that holds five or more cards, highest first. Empty without a flush.
+        value: >-
+          cel.bind(ranks, self.cards.filter(c, self.cards.filter(d, d % 4 == c % 4).size() >= 5).map(c, c / 4 + 2),
+            sortBy(ranks, ranks.map(r, -r)))
+      straight:
+        type: int
+        doc: The top rank of the best straight, or 0. The ace also plays low.
+        value: "([0] + range(10).map(i, i + 5).filter(h, range(5).all(k, self.counts[h - k == 1 ? 14 : h - k] > 0))).max()"
+      straightFlush:
+        type: int
+        value: "([0] + range(10).map(i, i + 5).filter(h, range(5).all(k, (h - k == 1 ? 14 : h - k) in self.flush))).max()"
+      category:
+        type: int
+        doc: The kind of hand, as an index into tables.category.
+        value: >-
+          cel.bind(most, self.counts[self.groups[0]], cel.bind(next, self.counts[self.groups[1]],
+            self.straightFlush > 0 ? 8
+            : most == 4 ? 7
+            : most == 3 && next >= 2 ? 6
+            : self.flush.size() > 0 ? 5
+            : self.straight > 0 ? 4
+            : most == 3 ? 3
+            : most == 2 && next == 2 ? 2
+            : most == 2 ? 1
+            : 0))
+      kickers:
+        type: list<int>
+        doc: The five numbers that break a tie between two hands of the same category, most important first.
+        value: >-
+          cel.bind(g, self.groups,
+            self.category == 8 ? [self.straightFlush, 0, 0, 0, 0]
+            : self.category == 7 ? [g[0], ([0] + range(15).filter(r, self.counts[r] > 0 && r != g[0])).max(), 0, 0, 0]
+            : self.category == 6 ? [g[0], g[1], 0, 0, 0]
+            : self.category == 5 ? range(5).map(i, self.flush[i])
+            : self.category == 4 ? [self.straight, 0, 0, 0, 0]
+            : self.category == 3 ? [g[0], g[1], g[2], 0, 0]
+            : self.category == 2 ? [g[0], g[1], ([0] + range(15).filter(r, self.counts[r] > 0 && r != g[0] && r != g[1])).max(), 0, 0]
+            : self.category == 1 ? [g[0], g[1], g[2], g[3], 0]
+            : [g[0], g[1], g[2], g[3], g[4]])
+      hand:
+        type: int
+        doc: The best five-card hand as one number. A higher number beats a lower one; equal numbers split.
+        value: "self.category * 759375 + range(5).map(i, self.kickers[i] * tables.place[i]).sum()"
+      strength:
+        type: int
+        doc: A rough 0 to 100 reading of the hand so far, for behaviors to weigh. It reads the hole cards, so only their owner can read it.
+        value: >-
+          cel.bind(hi, self.hole.map(c, c / 4 + 2).max(), cel.bind(lo, self.hole.map(c, c / 4 + 2).min(),
+            game.board.size() == 0
+              ? (hi == lo ? min(100, 50 + hi * 3)
+                : hi * 3 + lo * 2 - 8 + (self.hole[0] % 4 == self.hole[1] % 4 ? 6 : 0) + (hi - lo == 1 ? 3 : 0))
+              : cel.bind(mine, self.hole.exists(c, self.counts[c / 4 + 2] >= 2),
+                  self.category >= 4 ? 88 + self.category
+                  : self.category == 3 ? (mine ? 85 : 40)
+                  : self.category == 2 ? (mine ? 72 : 30)
+                  : self.category == 1 ? (!mine ? 22 : self.groups[0] >= game.board.map(c, c / 4 + 2).max() ? 62 : 45)
+                  : 10 + (hi >= 13 ? 6 : 0)
+                    + (game.board.size() < 5 && self.hole.exists(c, self.cards.filter(d, d % 4 == c % 4).size() == 4) ? 14 : 0))))
+    checks:
+      - { that: "self.chips >= 0 && self.staked >= 0 && self.committed >= 0", message: chips cannot go below zero }
+      - { that: "self.chair >= 0 && self.chair < all.player.size()", message: chairs are numbered from 0 }
+      - { that: "all.player.filter(p, p.chair == self.chair).size() == 1", message: two players cannot share a chair }
+      - { that: "self.hole.size() <= 2", message: a player holds at most two cards }
+
+signals:
+  pot.win: { params: { player: player, amount: int }, doc: "A pot or a side pot goes to a player." }
+
+procedures:
+  draw:
+    doc: Takes one card at random from the cards not yet dealt.
+    returns: { card: int }
+    do:
+      - roll: { as: pick, d: "game.deck.size()" }
+      - let: { card: "game.deck[pick - 1]" }
+      - set: { game.deck: "game.deck.filter(c, c != card)" }
+
+  pay:
+    doc: Moves chips from a player's stack into the pot.
+    params: { player: player, amount: int }
+    do:
+      - set:
+          player.chips: "player.chips - amount"
+          player.staked: "player.staked + amount"
+          player.committed: "player.committed + amount"
+
+  dealHand:
+    doc: Moves the button, posts the blinds, and deals two cards each.
+    do:
+      # The street is set first: a scenario reads `done` as "between hands".
+      - set: { game.street: "'preflop'", game.hand: "game.hand + 1", game.deck: "range(52)", game.board: "[]" }
+      - each: player
+        in: all.player
+        do:
+          # A player with no chips sits the hand out.
+          - set: { player.hole: "[]", player.staked: 0, player.committed: 0, player.acted: false, player.folded: "player.chips == 0" }
+      - let:
+          n: "all.player.size()"
+          seated: "all.player.filter(p, !p.folded)"
+      - let: { dealer: "sortBy(seated, seated.map(p, (p.chair - game.button - 1 + n) % n)).first()" }
+      - set: { game.button: dealer.chair }
+      # Clockwise from the button's left, so the button comes last.
+      - let: { order: "sortBy(seated, seated.map(p, (p.chair - game.button - 1 + n) % n))" }
+      # With two players, the button posts the small blind.
+      - let:
+          small: "order.size() == 2 ? order[1] : order[0]"
+          big: "order.size() == 2 ? order[0] : order[1]"
+      - call: pay
+        with: { player: small, amount: "min(small.chips, game.smallBlind)" }
+      - call: pay
+        with: { player: big, amount: "min(big.chips, game.bigBlind)" }
+      - set: { game.bet: game.bigBlind, game.minRaise: game.bigBlind, game.last: big.chair }
+      - each: round
+        in: range(2)
+        do:
+          - each: player
+            in: order
+            do:
+              - call: draw
+                as: { card: card }
+              - set: { player.hole: "player.hole + [card]" }
+
+  nextStreet:
+    doc: Opens a new street and deals its board cards. Play starts on the button's left.
+    params: { street: street }
+    do:
+      - set: { game.street: street, game.bet: 0, game.minRaise: game.bigBlind, game.last: game.button }
+      - each: player
+        in: all.player
+        do:
+          - set: { player.staked: 0, player.acted: false }
+      - each: dealt
+        in: "range(street == 'flop' ? 3 : 1)"
+        do:
+          - call: draw
+            as: { card: card }
+          - set: { game.board: "game.board + [card]" }
+
+  bettingRound:
+    doc: >-
+      Play passes clockwise until everyone still in has matched the bet and
+      has acted since the last full raise. A player who is all in is skipped.
+    do:
+      - while: >-
+          all.player.filter(p, !p.folded).size() > 1
+          && all.player.exists(p, p.canAct
+            && (p.staked < game.bet || (!p.acted && all.player.filter(q, q.canAct).size() > 1)))
+        do:
+          - let:
+              n: "all.player.size()"
+              waiting: "all.player.filter(p, p.canAct && (p.staked < game.bet || !p.acted))"
+          - let: { next: "sortBy(waiting, waiting.map(p, (p.chair - game.last - 1 + n) % n)).first()" }
+          - prompt:
+              seat: next.seat
+              with: { player: next }
+              offer: [fold, check, call, raise]
+          - set: { game.last: next.chair }
+
+  showdown:
+    doc: >-
+      Awards the pot. Chips are paid out a layer at a time, from the smallest
+      amount any remaining player put in: each layer is a main or side pot,
+      and goes to the best hand among those who paid into it. A player left
+      alone in a layer takes it without showing.
+    do:
+      - let: { n: "all.player.size()" }
+      - if: "all.player.filter(p, !p.folded).size() > 1"
+        then:
+          - set: { game.street: "'showdown'" }
+      - while: "all.player.exists(p, !p.folded && p.committed > 0)"
+        do:
+          - let: { live: "all.player.filter(p, !p.folded && p.committed > 0)" }
+          - let: { level: "live.map(p, p.committed).min()" }
+          - let:
+              share: "all.player.map(p, min(p.committed, level)).sum()"
+              best: "live.size() == 1 ? 0 : live.map(p, p.hand).max()"
+          # Tied hands split; an odd chip goes to the first of them left of the button.
+          - let:
+              winners: >-
+                live.size() == 1 ? live
+                  : cel.bind(tied, live.filter(p, p.hand == best), sortBy(tied, tied.map(p, (p.chair - game.button - 1 + n) % n)))
+          - each: player
+            in: all.player
+            do:
+              - set: { player.committed: "max(0, player.committed - level)" }
+          - each: i
+            in: "range(winners.size())"
+            do:
+              - let:
+                  winner: "winners[i]"
+                  amount: "floorDiv(share, winners.size()) + (i < share % winners.size() ? 1 : 0)"
+              - set: { winner.chips: "winner.chips + amount" }
+              - emit: pot.win
+                with: { player: winner, amount: amount }
+
+intents:
+  fold:
+    params: { player: player }
+    gate: "player.staked < game.bet"
+    effects:
+      - set: { player.folded: true, player.acted: true }
+
+  check:
+    params: { player: player }
+    gate: "player.staked == game.bet"
+    effects:
+      - set: { player.acted: true }
+
+  call:
+    doc: Match the bet, or go all in for less.
+    params: { player: player }
+    gate: "player.staked < game.bet"
+    effects:
+      - call: pay
+        with: { player: player, amount: "min(player.chips, game.bet - player.staked)" }
+      - set: { player.acted: true }
+
+  raise:
+    doc: >-
+      Bet or raise so that the stake for the street is `to`. The sizes on
+      offer are the minimum raise, half the pot, the pot, and all in. A raise
+      smaller than the minimum is allowed only as an all-in, and does not
+      reopen the betting for those who have already acted.
+    params:
+      player: player
+      to:
+        type: int
+        in: >-
+          cel.bind(pot, all.player.map(p, p.committed).sum() + game.bet - player.staked,
+            [game.bet + game.minRaise, game.bet + floorDiv(pot, 2), game.bet + pot, player.staked + player.chips]
+              .distinct()
+              .filter(t, t > game.bet && t <= player.staked + player.chips
+                && (t >= game.bet + game.minRaise || t == player.staked + player.chips)))
+    gate:
+      - "!player.acted"
+      - "all.player.exists(p, p.id != player.id && p.canAct)"
+    effects:
+      - if: "to - game.bet >= game.minRaise"
+        then:
+          - set: { game.minRaise: "to - game.bet" }
+          - each: other
+            in: "all.player.filter(p, p.id != player.id)"
+            do:
+              - set: { other.acted: false }
+      - call: pay
+        with: { player: player, amount: "to - player.staked" }
+      - set: { game.bet: to, player.acted: true }
+
+flow:
+  # The scenario says when the match ends; the ruleset only knows how to play a hand.
+  - while: true
+    do:
+      - call: dealHand
+      - call: bettingRound
+      - each: street
+        in: "['flop', 'turn', 'river']"
+        do:
+          - if: "all.player.filter(p, !p.folded).size() > 1"
+            then:
+              - call: nextStreet
+                with: { street: street }
+              - call: bettingRound
+      - call: showdown
+      - set: { game.street: "'done'" }
+
+behaviors:
+  shark:
+    doc: Tight and aggressive. Calls when the price is right for the hand, and bets strong hands in proportion to the pot.
+    scores:
+      fold: 10
+      check: 20
+      call: >-
+        cel.bind(cost, min(player.chips, game.bet - player.staked), cel.bind(pot, all.player.map(p, p.committed).sum(),
+          player.strength * (pot + cost) >= 110 * cost ? 30 : 0))
+      raise: >-
+        player.strength < 60 ? 0
+          : cel.bind(want, game.bet + floorDiv(all.player.map(p, p.committed).sum() * player.strength, 100),
+              50 - floorDiv(abs(to - want) * 10, max(1, want)))
+
+  station:
+    doc: A calling station. Never folds, and raises only with a monster.
+    scores:
+      fold: 0
+      check: 20
+      call: 30
+      raise: "player.strength >= 90 ? 40 : 0"
+
+  maniac:
+    doc: Loose and aggressive. Raises the minimum with almost anything, and shoves a big hand.
+    scores:
+      fold: "player.strength < 30 && (game.bet - player.staked) * 2 > all.player.map(p, p.committed).sum() ? 25 : 0"
+      check: 5
+      call: 20
+      raise: >-
+        player.strength >= 80 && to == player.staked + player.chips ? 60
+          : player.strength >= 35 && to == game.bet + game.minRaise ? 30
+          : 0

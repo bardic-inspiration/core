@@ -1,0 +1,104 @@
+# Two mages duel across open ground. Ember throws fire from long range; Rime
+# resists fire, and wants to close to 60 feet, where it can hold and counter.
+# Each has a turn's worth of choices that the other can answer: a spell can
+# be countered, a hit warded off, and concentration broken.
+#
+# The duellists are written for this scenario, not taken from a stat block:
+# casters with slots for levels 1 to 3, built on the creature rules. Spell
+# numbers follow SRD 5.2 (Fire Bolt, Ray of Frost, Magic Missile, Shield,
+# Scorching Ray, Hold Person, Misty Step, Counterspell, Fireball), written
+# from the published spells and not yet checked against ttrpg-library.
+format: 1
+scenario: { id: mage-duel, title: Mage duel }
+ruleset: { id: dnd-5e-2024-slice, version: 0.2.0 }
+
+seats:
+  ember: { behavior: artillery }
+  rime: { behavior: controller }
+  referee: { referee: true }
+
+space: { width: 36, height: 12 }
+
+entities:
+  - id: ember
+    kind: creature
+    fields:
+      { name: Ember, seat: ember, side: red, size: medium, cr: "5", ac: 15, hitDice: 9, speed: 30,
+        ability: { str: 9, dex: 14, con: 12, int: 17, wis: 12, cha: 11 }, pos: [7, 6],
+        saves: [int, wis], slots: { "1": 4, "2": 3, "3": 2 } }
+  - id: rime
+    kind: creature
+    fields:
+      { name: Rime, seat: rime, side: blue, size: medium, cr: "5", ac: 15, hitDice: 9, speed: 30,
+        ability: { str: 9, dex: 14, con: 14, int: 17, wis: 12, cha: 11 }, pos: [28, 6],
+        saves: [int, wis], resists: [fire], slots: { "1": 4, "2": 3, "3": 2 } }
+  - id: dagger
+    kind: weapon
+    fields: { name: Dagger, ability: dex, dice: 1, die: 4, damageType: piercing }
+
+  # Cantrips, as a caster of this level casts them.
+  - id: fire-bolt
+    kind: spell
+    fields: { name: Fire Bolt, level: 0, form: attack, range: 120, dice: 2, die: 10, damageType: fire }
+  - id: ray-of-frost
+    kind: spell
+    fields:
+      { name: Ray of Frost, level: 0, form: attack, range: 60, dice: 2, die: 8, damageType: cold,
+        applies: slowed, ends: sourceTurnStart, slow: 10 }
+  # Level 1.
+  - id: magic-missile
+    kind: spell
+    fields: { name: Magic Missile, level: 1, form: darts, range: 120, count: 3, countPerLevel: 1, dice: 1, die: 4, flat: 1, damageType: force }
+  - id: shield
+    kind: spell
+    fields: { name: Shield, level: 1, form: ward, time: reaction }
+  # Level 2.
+  - id: scorching-ray
+    kind: spell
+    fields: { name: Scorching Ray, level: 2, form: attack, range: 120, count: 3, countPerLevel: 1, dice: 2, die: 6, damageType: fire }
+  - id: hold-person
+    kind: spell
+    fields:
+      { name: Hold Person, level: 2, form: save, range: 60, save: wis, applies: paralyzed, ends: saveAtTurnEnd, concentration: true }
+  - id: misty-step
+    kind: spell
+    fields: { name: Misty Step, level: 2, form: step, time: bonus, range: 30 }
+  # Level 3.
+  - id: counterspell
+    kind: spell
+    fields: { name: Counterspell, level: 3, form: counter, time: reaction, range: 60, save: con }
+  - id: fireball
+    kind: spell
+    fields:
+      { name: Fireball, level: 3, form: burst, range: 150, radius: 20, save: dex, dice: 8, die: 6, dicePerLevel: 1,
+        damageType: fire, half: true }
+
+links:
+  - { rel: wields, from: ember, to: dagger }
+  - { rel: wields, from: rime, to: dagger }
+  - { rel: knows, from: ember, to: fire-bolt }
+  - { rel: knows, from: ember, to: magic-missile }
+  - { rel: knows, from: ember, to: shield }
+  - { rel: knows, from: ember, to: scorching-ray }
+  - { rel: knows, from: ember, to: misty-step }
+  - { rel: knows, from: ember, to: counterspell }
+  - { rel: knows, from: ember, to: fireball }
+  - { rel: knows, from: rime, to: ray-of-frost }
+  - { rel: knows, from: rime, to: magic-missile }
+  - { rel: knows, from: rime, to: shield }
+  - { rel: knows, from: rime, to: hold-person }
+  - { rel: knows, from: rime, to: misty-step }
+  - { rel: knows, from: rime, to: counterspell }
+
+end:
+  - when: "!all.creature.exists(c, !c.defeated && all.creature.exists(d, !d.defeated && d.side != c.side))"
+    outcome:
+      result: "'win'"
+      winner: "all.creature.filter(c, !c.defeated).map(c, c.side).first()"
+      rounds: game.round
+      slotsLeft: "all.creature.filter(c, !c.defeated).map(c, c.slotLevels.map(l, c.slots[string(l)]).sum()).sum()"
+  # The duel can stall once the slots are gone and neither can reach the other.
+  - when: "game.round > 30"
+    outcome: { result: "'draw'", rounds: game.round }
+
+limits: { maxDecisions: 6000 }

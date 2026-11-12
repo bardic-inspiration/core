@@ -1,0 +1,35 @@
+# Four players, 50 big blinds each, with fixed blinds. Three play a style and
+# the fourth chooses at random among its legal intents. The match is a
+# freeze-out: it ends when one player holds every chip, or after 150 hands.
+format: 1
+scenario: { id: four-handed, title: Four-handed freeze-out }
+ruleset: { id: holdem, version: 0.1.0 }
+
+seats:
+  north: { behavior: shark }
+  east: { behavior: station }
+  south: { behavior: maniac }
+  west: {}
+
+game: { smallBlind: 10, bigBlind: 20 }
+
+entities:
+  - { id: p-north, kind: player, fields: { seat: north, chair: 0, chips: 1000 } }
+  - { id: p-east, kind: player, fields: { seat: east, chair: 1, chips: 1000 } }
+  - { id: p-south, kind: player, fields: { seat: south, chair: 2, chips: 1000 } }
+  - { id: p-west, kind: player, fields: { seat: west, chair: 3, chips: 1000 } }
+
+# A hand is over when the street is `done`; chips are in flight until then.
+end:
+  - when: "game.street == 'done' && all.player.filter(p, p.chips > 0).size() == 1"
+    outcome:
+      result: "'win'"
+      winner: "all.player.filter(p, p.chips > 0).first().seat"
+      hands: game.hand
+  - when: "game.street == 'done' && game.hand >= 150"
+    outcome:
+      result: "'time'"
+      winner: "sortBy(all.player, all.player.map(p, -p.chips)).first().seat"
+      hands: game.hand
+
+limits: { maxDecisions: 20000 }

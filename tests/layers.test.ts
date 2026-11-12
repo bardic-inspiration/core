@@ -7,7 +7,7 @@ import { loadRuleset, loadScenarioFile, readYaml } from '../src/load.ts';
 import { aiSeats, compileWith, fixture, read, refusal, tiny } from './helpers.ts';
 
 const base = () => readYaml('rulesets/dnd-5e-2024-slice/ruleset.yaml');
-const extension = (body: Record<string, unknown>, wants = '0.1.0') => ({
+const extension = (body: Record<string, unknown>, wants = '0.2.0') => ({
   format: 1, extension: { id: 'test', version: '0.1.0' }, extends: { id: 'dnd-5e-2024-slice', version: wants }, ...body,
 });
 
@@ -54,7 +54,7 @@ describe('extensions', () => {
   });
 
   it('refuses an extension written for another ruleset or an incompatible version', () => {
-    expect(refusal(() => compileWith(base(), [extension({}, '0.2.0')]))).toMatch(/extends dnd-5e-2024-slice@0\.2\.0/);
+    expect(refusal(() => compileWith(base(), [extension({}, '0.3.0')]))).toMatch(/extends dnd-5e-2024-slice@0\.3\.0/);
     expect(refusal(() => compileWith(tiny(), [extension({})]))).toMatch(/but the base is tiny@1\.0\.0/);
   });
 
@@ -89,11 +89,11 @@ describe('patterns', () => {
 });
 
 describe('a tick-driven sandbox (fixture)', () => {
-  const registry = compileWith(fixture('junkyard'));
+  const registry = compileWith(fixture('ticker'));
   const scenario = loadScenario(registry, {
     format: 1,
     scenario: { id: 'yard' },
-    ruleset: { id: 'junkyard', version: '0.1.0' },
+    ruleset: { id: 'ticker', version: '0.1.0' },
     seats: { yard: { behavior: 'builder' } },
     entities: [{ id: 'first', kind: 'bot', fields: { seat: 'yard' } }],
     end: [{ when: 'game.tick >= 8', outcome: { bots: 'all.bot.size()', power: 'all.bot.map(b, b.power).sum()' } }],

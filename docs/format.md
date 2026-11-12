@@ -7,8 +7,13 @@ Every document is YAML, checked against a JSON Schema
 ([`src/schemas.ts`](../src/schemas.ts)) and then resolved. Unknown keys,
 unknown names, and ill-typed expressions are all refused. The shipped
 rulesets are the worked examples:
-[checkers](../rulesets/checkers/ruleset.yaml) and the
-[5e slice](../rulesets/dnd-5e-2024-slice/ruleset.yaml).
+
+| Ruleset | Shows |
+|---|---|
+| [checkers](../rulesets/checkers/ruleset.yaml) | A closed game: fixed seats, a forced move, a chained move. |
+| [5e slice](../rulesets/dnd-5e-2024-slice/ruleset.yaml) | Dice, derived stats, relations, reactions during resolution, spells, lasting effects. |
+| [hold 'em](../rulesets/holdem/ruleset.yaml) | Hidden information, and a scheduler that is neither rounds nor ticks. |
+| [junkyard](../rulesets/junkyard/ruleset.yaml) | An open game: ticks, state that grows and shrinks, no winner. |
 
 ## The model
 
@@ -69,7 +74,7 @@ truncates toward zero, so a rule that rounds down says `floorDiv(a, b)`.
 | Group | Functions |
 |---|---|
 | Math | `floorDiv` `ceilDiv` `abs` `sign` `min` `max` `clamp` `floor` `ceil` `round` |
-| Lists | `.sum()` `.min()` `.max()` `.first()` `sortBy(list, keys)` `range(n)`, plus CEL's `.map` `.filter` `.exists` `.all` `.size()` and `cel.bind` |
+| Lists | `.sum()` `.min()` `.max()` `.first()` `.distinct()` `sortBy(list, keys)` `range(n)`, plus CEL's `.map` `.filter` `.exists` `.all` `.size()` and `cel.bind` |
 | Cells | `cell(x, y)` `.offset(dx, dy)` `.mid(other)` `==` |
 | Space (host) | `inBounds(cell)` `distance(a, b)` `neighbors(cell)` `cellsWithin(cell, range)` `lineOfSight(a, b)` |
 
@@ -95,6 +100,33 @@ A derived value is never stored. With `each`, the expression is evaluated
 once per key of the map's enum, with the key bound to that name. Checks run
 when an instance is created (by a scenario, a `create` effect, or a referee),
 and `Match.violations()` runs them over the whole state.
+
+### Hidden information
+
+A field or a global may say who sees it:
+
+```yaml
+kinds:
+  player:
+    fields:
+      hole:
+        type: list<int>
+        default: []
+        visible: "viewer == self.seat || (game.street == 'showdown' && !self.folded)"
+globals:
+  deck: { type: list<int>, default: [], visible: false }
+```
+
+`visible` is a bool expression over `viewer`, the seat looking, and `self` on
+a kind's field. Without it, every seat sees the value. The rules themselves
+always see everything.
+
+A seat's legal intents and a behavior's scores are worked out through that
+seat's view. Reading a value hidden from the seat is an error there, not a
+blank: a gate or a score that depends on a secret stops the match with the
+address it tried to read. A derived value is hidden whenever anything it
+reads is. `Match.view(seat)` returns the state with the hidden values left
+out; a referee seat sees all of it. The event log is not filtered.
 
 ## Relations
 
@@ -132,7 +164,7 @@ The closed set. Each effect is one of these.
 
 | Effect | Does |
 |---|---|
-| `set: { actor.hp: expr, game.round: expr }` | Writes fields, in order. A map entry is `actor.ability.str`. |
+| `set: { actor.hp: expr, game.round: expr }` | Writes fields, in order. A map entry is `actor.ability.str`, or `actor.slots[expr]` when the key is computed. |
 | `create: { kind, as, fields }` | Makes an instance and binds it. |
 | `destroy: expr` | Removes an entity and its links. |
 | `link` / `unlink: { rel, from, to }` | Joins or separates two entities. |
@@ -168,9 +200,41 @@ flow:
 
 `offer` lists intents or menus. With `repeat`, the seat is asked again after
 each intent resolves, until an intent runs `done` or nothing is legal.
-`ifNone` runs when nothing was legal the first time. A tick scheduler is the
-same shape with one prompt per entity per pass
-([`tests/fixtures/junkyard.yaml`](../tests/fixtures/junkyard.yaml)).
+`ifNone` runs when nothing was legal the first time.
+
+The flow is the scheduler, and the shipped rulesets write three kinds. Rounds
+of turns are the loop above. Ticks are the same shape with one prompt per
+entity per pass ([junkyard](../rulesets/junkyard/ruleset.yaml)). A betting
+round is a `while` over a condition, "someone still owes a decision", that
+picks who is next each time round
+([hold 'em](../rulesets/holdem/ruleset.yaml)).
+
+### Things in flight
+
+A signal returns nothing, and an intent chosen at a prompt cannot hand a
+value back to the effects that asked. When a reaction must change something
+that is still being resolved, that thing is made an entity for as long as it
+is in flight:
+
+```yaml
+procedures:
+  harm:
+    params: { target: creature, amount: int, damageType: damageType }
+    do:
+      - create: { kind: wound, as: wound, fields: { target: target, amount: amount, damageType: damageType } }
+      - emit: wound.incoming          # any reaction may change wound.amount
+        with: { wound: wound }
+      - let: { dealt: wound.amount }
+      - destroy: wound
+      - emit: hp.lose
+        with: { target: target, amount: dealt }
+```
+
+The 5e slice does this for damage (`wound`, which Resistance halves) and for
+spells (`casting`, which a Counterspell stops). Because the reaction hangs on
+a signal, an extension can add one without touching the procedure. A prompt
+passes facts the other way through `with`: the Shield reaction is given the
+attack roll it would have to beat.
 
 ## Behaviors
 
@@ -185,8 +249,13 @@ behaviors:
 ```
 
 A utility seat takes the highest-scoring legal intent and breaks ties with its
-own seeded stream. A goal multiplies the scores it names while its condition
-holds.
+own seeded stream. An intent the behavior does not score counts as 0. A goal
+multiplies the scores it names while its condition holds; its condition sees
+the same params as the scores it scales, and a negative factor turns a score
+around (`move: -1` makes "towards the prey" into "away from it").
+
+Two behaviors can share a score with a YAML anchor (`cast: &spellValue ...`
+and `cast: *spellValue`). YAML merge keys (`<<`) are not read.
 
 ## Space
 
@@ -253,6 +322,13 @@ End conditions belong to the scenario. They are checked after every write a
 rule makes; the first that holds ends the match with its outcome. A match
 also ends as `complete` when the flow runs out, or `limit` at
 `limits.maxDecisions`.
+
+Because the check runs after every write, a condition can hold for a moment
+in the middle of a rule: in poker, one player holds every chip not in the pot
+whenever the others are all in. A ruleset with such moments gives the
+scenario something to wait for; hold 'em sets `game.street` to `done` between
+hands, and its scenarios test for that. An outcome need not name a winner:
+the junkyard's is a census.
 
 ## The log
 

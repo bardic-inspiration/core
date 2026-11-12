@@ -196,3 +196,130 @@ from ttrpg-library by hand; the translator is out of scope.
 **D29. No build step.** The source is TypeScript that Node can run by
 stripping types (`erasableSyntaxOnly`), and Vitest for tests. `npm test` is
 the one command.
+
+## 2026-11-12: four more games
+
+The prototype was pushed with four harder cases: a 5e fight with ten
+creatures on seven seats, a duel between two spellcasters, four-handed Texas
+Hold 'Em, and the junkyard as a full sandbox. Each entry says what the case
+forced and why the call went the way it did.
+
+### What the format gained
+
+**D30. Hidden information is declared on the field. (open question; replaces
+D18)** A field or global may carry `visible`, a bool expression over `viewer`
+(a seat) and, on a kind's field, `self`. `Match.view(seat)` leaves hidden
+values out. A seat's legal intents and its behavior's scores are evaluated
+through that seat's view, and reading a hidden value there is an error, not a
+blank. Why an error: a blank would need a made-up value of the right type,
+and a rule or score that silently read it would be a leak nobody saw. A
+derived value needs no declaration; it is hidden whenever what it reads is.
+The event log is not filtered: it is the referee's record.
+
+**D31. A deck has no order.** Hold 'em keeps the undealt cards as a list no
+seat can see, and draws one at random when a card is dealt. Why: a shuffled
+order would be state that exists only to be hidden, and the draw is already a
+logged `roll`.
+
+**D32. A thing in flight is an entity.** HANDOFF said a reaction that
+changes an amount in flight was not expressible, because signals return
+nothing. No new effect was needed. The procedure creates an entity for the
+thing (`wound` for damage, `casting` for a spell), emits a signal that
+carries it, reads it back, and destroys it. Why not give signals return
+values: an entity is already something any reaction can write, an extension
+can add a reaction without touching the closed procedure, and the change
+shows in the log as an ordinary `set`.
+
+**D33. A prompt passes facts in through `with`; the answer comes back
+through state.** The Shield reaction is given the attack roll `total` as a
+param, so the seat can tell whether +5 would turn the hit. The intent it
+chooses writes state (a lasting effect), and the procedure that asked reads
+Armor Class again. Why: it kept `prompt` as it was. An intent still cannot
+hand a value straight back to the effects that prompted it.
+
+**D34. A map entry can be written at a computed key.** `set` takes
+`owner.field[expr]` as well as `owner.field.key`. Spell slots needed it: the
+slot level is a param, and D6 allowed only a literal key. The key is checked
+against the map's key type when the write runs. This also fixed a fault: a
+keyed write to a global replaced the whole map with the one entry.
+
+**D35. One function was added to the library: `distinct()`.** Poker hand
+ranking is written entirely as derived values, with `sortBy`, `range`,
+`filter`, and a table of place values. Why this matters: a `handRank()`
+function would have been game code in the runtime.
+
+### The 5e slice, version 0.2.0
+
+**D36. A spell is an entity with a form.** `spell` is a kind; a scenario
+gives a caster its spells with a `knows` relation, as it gives weapons with
+`wields`. A spell's `form` (attack, save, darts, heal, burst, ward, counter,
+step) picks how it resolves, and its other fields fill the form in. Why:
+Fire Bolt, Scorching Ray, and Ray of Frost are one rule with different
+numbers, so they should be content. Shield, Counterspell, and Misty Step are
+each a form of one, which is honest about them being rules.
+
+**D37. Lasting effects are one kind.** An `effect` carries a condition, a
+source, an expiry rule, bonuses to Armor Class and Speed, and whether it
+needs concentration. Armor Class and Speed are `stacking` patterns over a
+creature's effects. The kit's `duration` pattern has one expiry rule, so
+`effect` is written out by hand; the pattern still serves the worg's bite.
+
+**D38. Reactions are ready from the start of combat.** Before, a creature's
+reaction was refilled only at the start of its own turn, so nobody could
+react in the first round before acting. This is a rule fix, and it changed
+how worg against scout plays (the worg now gets its Opportunity Attack when
+the scout backs off in round one).
+
+**D39. Simplifications added to D28.** One spell slot per turn, counted for
+every turn and not only the caster's own. Counterspell is the 2024 version:
+a Constitution save, and a countered spell keeps its slot. A warding spell
+and a counterspell take the lowest slot that will do. Magic Missile sends
+every dart at one creature. A prone creature cannot crawl; it stands or
+stays. Hide is not modelled, so Nimble Escape is Disengage only. A creature
+is still defeated at 0 hit points. The acolyte's uses per day are given as
+slots. Stat blocks and spell numbers are written from the published SRD 5.2
+text and have not been checked against ttrpg-library.
+
+### Schedulers, ends, and behaviors
+
+**D40. A betting round is a third kind of flow.** Hold 'em's is a `while`
+over "someone still owes a decision", choosing who is next each time round.
+It needed nothing new, which supports D2. Raise sizes are a param whose
+domain is four amounts (minimum, half the pot, the pot, all in), because the
+real choice is too wide to enumerate. No cards are burned.
+
+**D41. An end condition may need a marker to wait for.** End conditions are
+checked after every write, so "one player has all the chips" was true in the
+middle of any hand where the others were all in. Hold 'em sets `game.street`
+to `done` between hands and its scenarios test for it. A test caught a
+second case of the same thing. This is a wart: a ruleset should be able to
+say where a match may end.
+
+**D42. Behaviors stay one-step, and it shows.** Three things were needed to
+get sensible play from one-step scoring. A ranged behavior with no shot
+steps to a square that has one, after a scenario with boulders stalled for
+1,400 rounds. The pack circles when its way is blocked by its own side. A
+goal may scale by a negative number, which turns "towards the prey" into
+"away". There is still no pathfinding and no lookahead (D20). Hold 'em's
+`strength` is a derived value in the ruleset that exists for behaviors to
+read; it is the first rule data that is there for the AI and not the game.
+
+### Rulesets and tooling
+
+**D43. The junkyard is the fourth ruleset.** The brief names it as the other
+pole from a TTRPG. It is the open case: ticks, state that grows and shrinks,
+what a bot may do derived from the parts linked to it, a referee authoring
+scrap during play, and an outcome that is a census. The tick fixture is kept
+and renamed `ticker`.
+
+**D44. Matches are recorded as data.** `npm run sim` writes one record per
+match to `data/matches.jsonl`. A record has nothing that varies between runs
+of one seed, so the file doubles as a regression check through each match's
+`logHash`. Why committed: it is small, and a change in how the rules play
+then shows in review as a change in the data.
+
+**D45. A validate check stands in for CI.** `npm run validate` type-checks,
+compiles every ruleset alone and with each extension, loads and plays every
+scenario, compares three seeds of each against the recorded data, and runs
+the tests. A GitHub workflow runs it on pull requests. The spec-driven
+process from ttrpg-library is still to come.

@@ -1,0 +1,92 @@
+# Three swarms start with one bot each in a yard strewn with scrap, and more
+# scrap keeps falling. Two forage and one raids. Nobody wins: after 60 ticks
+# the scenario takes a census. A yardmaster seat can author new scrap while
+# the match runs.
+format: 1
+scenario: { id: yard, title: The yard }
+ruleset: { id: junkyard, version: 0.1.0 }
+
+seats:
+  rust: { behavior: forager }
+  moss: { behavior: forager }
+  chrome: { behavior: raider }
+  yardmaster: { referee: true }
+
+space:
+  width: 16
+  height: 12
+  # Walls of crushed cars.
+  blocked: [[5, 3], [5, 4], [5, 5], [10, 6], [10, 7], [10, 8], [7, 9], [8, 2]]
+
+game: { dropEvery: 4, swarmLimit: 6 }
+
+entities:
+  - { id: rust-1, kind: bot, fields: { seat: rust, pos: [1, 1] } }
+  - { id: moss-1, kind: bot, fields: { seat: moss, pos: [1, 10] } }
+  - { id: chrome-1, kind: bot, fields: { seat: chrome, pos: [14, 6] } }
+  # What each starts with.
+  - { id: leg-r, kind: part, fields: { type: leg } }
+  - { id: leg-m, kind: part, fields: { type: leg } }
+  - { id: leg-c, kind: part, fields: { type: leg, rating: 2 } }
+  - { id: arm-c, kind: part, fields: { type: arm } }
+  # Scrap lying about.
+  - { id: heap-1, kind: pile, fields: { pos: [3, 2] } }
+  - { id: heap-2, kind: pile, fields: { pos: [3, 9] } }
+  - { id: heap-3, kind: pile, fields: { pos: [7, 5] } }
+  - { id: heap-4, kind: pile, fields: { pos: [8, 6] } }
+  - { id: heap-5, kind: pile, fields: { pos: [12, 2] } }
+  - { id: heap-6, kind: pile, fields: { pos: [12, 10] } }
+  - { id: heap-7, kind: pile, fields: { pos: [6, 11] } }
+  - { id: s1, kind: part, fields: { type: panel } }
+  - { id: s2, kind: part, fields: { type: leg } }
+  - { id: s3, kind: part, fields: { type: cell } }
+  - { id: s4, kind: part, fields: { type: panel } }
+  - { id: s5, kind: part, fields: { type: leg } }
+  - { id: s6, kind: part, fields: { type: plate, rating: 2 } }
+  - { id: s7, kind: part, fields: { type: arm, rating: 2 } }
+  - { id: s8, kind: part, fields: { type: cell, rating: 2 } }
+  - { id: s9, kind: part, fields: { type: leg, rating: 2 } }
+  - { id: s10, kind: part, fields: { type: arm } }
+  - { id: s11, kind: part, fields: { type: plate } }
+  - { id: s12, kind: part, fields: { type: panel, rating: 2 } }
+  - { id: s13, kind: part, fields: { type: arm } }
+  - { id: s14, kind: part, fields: { type: leg } }
+  - { id: s15, kind: part, fields: { type: plate } }
+  - { id: s16, kind: part, fields: { type: cell } }
+  - { id: s17, kind: part, fields: { type: leg } }
+
+links:
+  - { rel: mounts, from: rust-1, to: leg-r }
+  - { rel: mounts, from: moss-1, to: leg-m }
+  - { rel: mounts, from: chrome-1, to: leg-c }
+  - { rel: mounts, from: chrome-1, to: arm-c }
+  - { rel: holds, from: heap-1, to: s1 }
+  - { rel: holds, from: heap-1, to: s2 }
+  - { rel: holds, from: heap-1, to: s3 }
+  - { rel: holds, from: heap-2, to: s4 }
+  - { rel: holds, from: heap-2, to: s5 }
+  - { rel: holds, from: heap-2, to: s6 }
+  - { rel: holds, from: heap-3, to: s7 }
+  - { rel: holds, from: heap-3, to: s8 }
+  - { rel: holds, from: heap-4, to: s9 }
+  - { rel: holds, from: heap-4, to: s10 }
+  - { rel: holds, from: heap-4, to: s11 }
+  - { rel: holds, from: heap-5, to: s12 }
+  - { rel: holds, from: heap-5, to: s13 }
+  - { rel: holds, from: heap-6, to: s14 }
+  - { rel: holds, from: heap-6, to: s15 }
+  - { rel: holds, from: heap-7, to: s16 }
+  - { rel: holds, from: heap-7, to: s17 }
+
+# An open game has no winner. The scenario only says when to stop and what to count.
+end:
+  - when: "game.tick > 60"
+    outcome:
+      result: "'census'"
+      bots: "all.bot.size()"
+      parts: "all.part.size()"
+      rust: "all.bot.filter(b, b.seat == 'rust').size()"
+      moss: "all.bot.filter(b, b.seat == 'moss').size()"
+      chrome: "all.bot.filter(b, b.seat == 'chrome').size()"
+
+limits: { maxDecisions: 20000 }

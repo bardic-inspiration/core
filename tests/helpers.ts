@@ -89,3 +89,27 @@ export function read(registry: Registry, scenario: Scenario, state: State, sourc
   if (issues.length > 0) throw new Error(issues[0].message);
   return dehydrate(new Session(registry, state, scenario.world).eval(compiled));
 }
+
+/** Ends turns and declines reactions until `seat` is asked to choose `intent` (or anything, when no intent is named). */
+export function until(match: Match, seat: string, intent?: string): void {
+  for (let decision = match.advance(); decision; decision = match.advance()) {
+    if (decision.seat === seat && (!intent || decision.options.some((option) => option.intent === intent))) return;
+    const pass = decision.options.findIndex((option) => ['endTurn', 'holdReaction', 'idle', 'check', 'fold'].includes(option.intent));
+    if (pass < 0) throw new Error(`${decision.seat} has no way to pass: ${JSON.stringify(decision.options)}`);
+    match.submit(pass);
+  }
+  throw new Error(`the match ended before ${seat} was asked`);
+}
+
+/**
+ * Dice are seeded, so a test that needs a particular roll looks for a seed
+ * that gives it: runs `attempt` on seeds 1 to 60 and returns the first result
+ * that is not undefined.
+ */
+export function findSeed<T>(attempt: (seed: number) => T | undefined): T {
+  for (let seed = 1; seed <= 60; seed++) {
+    const found = attempt(seed);
+    if (found !== undefined) return found;
+  }
+  throw new Error('no seed from 1 to 60 gave the roll this test needs');
+}

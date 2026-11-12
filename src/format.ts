@@ -14,6 +14,11 @@ export interface FieldDoc {
   default?: unknown;
   /** Expression over `self`, evaluated once when an instance is created. */
   init?: Expr;
+  /**
+   * Who may see the value: a bool expression over `viewer` (a seat) and, on a
+   * kind's field, `self`. Absent: every seat sees it.
+   */
+  visible?: Expr;
   doc?: string;
 }
 

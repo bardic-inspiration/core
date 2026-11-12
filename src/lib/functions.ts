@@ -85,6 +85,8 @@ export function registerFunctions(env: Environment, host: () => SpaceHost): void
     return list[0];
   });
   fn('sortBy(list<A>, list<int>): list<A>', sortBy);
+  fn('list<int>.distinct(): list<int>', (list: bigint[]) => [...new Set(list)]);
+  fn('list<string>.distinct(): list<string>', (list: string[]) => [...new Set(list)]);
   fn('range(int): list<int>', (n: bigint) => Array.from({ length: Number(n) }, (_, i) => BigInt(i)));
 
   // Cell arithmetic: core's own, no host needed.
