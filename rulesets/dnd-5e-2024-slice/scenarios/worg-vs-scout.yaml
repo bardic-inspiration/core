@@ -1,0 +1,46 @@
+# A worg hunts a scout across open ground. Stat-block inputs are the ones in
+# ttrpg-library (content/dnd-5e-2024/creature/worg.json, scout.json); every
+# derived number comes from the ruleset.
+format: 1
+scenario: { id: worg-vs-scout, title: Worg against Scout }
+ruleset: { id: dnd-5e-2024-slice, version: 0.1.0 }
+
+seats:
+  wild: { behavior: hunter }
+  ranger: { behavior: skirmisher }
+  referee: { referee: true }
+
+space: { width: 24, height: 12 }
+
+entities:
+  - id: worg
+    kind: creature
+    fields:
+      { name: Worg, seat: wild, side: monsters, size: large, cr: "1/2", ac: 13, hitDice: 4, speed: 50,
+        ability: { str: 16, dex: 13, con: 13, int: 7, wis: 11, cha: 8 }, pos: [2, 6] }
+  - id: bite
+    kind: weapon
+    fields: { name: Bite, ability: str, dice: 1, die: 8, damageType: piercing, exposes: true }
+  - id: scout
+    kind: creature
+    fields:
+      { name: Scout, seat: ranger, side: adventurers, size: medium, cr: "1/2", ac: 13, hitDice: 3, speed: 30,
+        ability: { str: 11, dex: 14, con: 12, int: 11, wis: 13, cha: 11 }, pos: [20, 6], attacksPerAction: 2 }
+  - id: shortsword
+    kind: weapon
+    fields: { name: Shortsword, ability: dex, dice: 1, die: 6, damageType: piercing }
+  - id: longbow
+    kind: weapon
+    fields: { name: Longbow, ability: dex, dice: 1, die: 8, damageType: piercing, ranged: true, range: 150, longRange: 600 }
+
+links:
+  - { rel: wields, from: worg, to: bite }
+  - { rel: wields, from: scout, to: shortsword }
+  - { rel: wields, from: scout, to: longbow }
+
+end:
+  - when: "!all.creature.exists(c, !c.defeated && all.creature.exists(d, !d.defeated && d.side != c.side))"
+    outcome:
+      result: "'win'"
+      winner: "all.creature.filter(c, !c.defeated).map(c, c.side).first()"
+      rounds: game.round

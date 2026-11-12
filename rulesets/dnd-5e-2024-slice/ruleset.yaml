@@ -1,0 +1,309 @@
+# A combat slice of D&D 5e (SRD 5.2): initiative, turns, movement on a grid,
+# weapon attacks with advantage and critical hits, opportunity attacks, and
+# hit points. Every number a stat block derives is derived here too, from the
+# same inputs ttrpg-library stores (rulesets/dnd-5e-2024/derive.ts).
+#
+# This work includes material from the System Reference Document 5.2
+# ("SRD 5.2") by Wizards of the Coast LLC, available at
+# https://www.dndbeyond.com/srd. The SRD 5.2 is licensed under CC-BY-4.0.
+format: 1
+ruleset: { id: dnd-5e-2024-slice, version: 0.1.0, title: D&D 5e (SRD 5.2) combat slice }
+
+# What homebrew may change. `x.+` allows additions directly under x and
+# nothing else, so homebrew can add kinds, fields, intents, signals, tables,
+# menu entries, reactions, and behavior scores. The rules themselves (derived
+# values, existing intents, the flow) are closed.
+open:
+  - kinds.+
+  - kinds.*.fields.+
+  - relations.+
+  - signals.+
+  - procedures.+
+  - intents.+
+  - menus.+
+  - menus.*.+
+  - reactions.+
+  - behaviors.+
+  - behaviors.*.scores.+
+  - behaviors.*.goals.+
+  - tables.+
+  - enums.damageType.+
+
+uses:
+  - pattern: pool
+    with:
+      kind: creature
+      name: hp
+      # Average hit points: Hit Dice at their average, rounded down, plus Constitution.
+      max: "max(1, floorDiv(self.hitDice * (tables.hitDie[self.size] + 1), 2) + self.hitDice * self.mod['con'])"
+  - { pattern: budget, with: { kind: creature, name: movement, amount: self.speed, signal: turn.start, who: actor } }
+  - { pattern: budget, with: { kind: creature, name: action, amount: 1, signal: turn.start, who: actor } }
+  - { pattern: budget, with: { kind: creature, name: reaction, amount: 1, signal: turn.start, who: actor } }
+  - { pattern: check, with: { name: d20Test, sides: 20 } }
+  - pattern: duration
+    with: { name: exposure, target: creature, owner: creature, inverse: exposures, signal: turn.start, who: actor }
+  - pattern: slots
+    with: { relation: wields, holder: creature, item: weapon, inverse: wielders, capacity: 2 }
+
+enums:
+  ability: [str, dex, con, int, wis, cha]
+  size: [tiny, small, medium, large, huge, gargantuan]
+  damageType: [bludgeoning, piercing, slashing]
+
+tables:
+  # Hit Die by creature size.
+  hitDie: { tiny: 4, small: 6, medium: 8, large: 10, huge: 12, gargantuan: 20 }
+  # Proficiency Bonus by Challenge Rating.
+  proficiencyByCr:
+    { "0": 2, "1/8": 2, "1/4": 2, "1/2": 2, "1": 2, "2": 2, "3": 2, "4": 2, "5": 3, "6": 3, "7": 3, "8": 3,
+      "9": 4, "10": 4, "11": 4, "12": 4, "13": 5, "14": 5, "15": 5, "16": 5, "17": 6, "18": 6, "19": 6, "20": 6,
+      "21": 7, "22": 7, "23": 7, "24": 7, "25": 8, "26": 8, "27": 8, "28": 8, "29": 9, "30": 9 }
+
+space: { grid: square, adjacency: 8, unit: 5, increment: 5 }
+
+globals:
+  round: { type: int, default: 0 }
+
+kinds:
+  creature:
+    fields:
+      name: string
+      seat: seat
+      side: string
+      size: size
+      cr: string
+      ac: int
+      hitDice: int
+      speed: int
+      ability: "map<ability,int>"
+      pos: cell
+      attacksPerAction: { type: int, default: 1, doc: "How many attacks the Attack action gives (Multiattack)." }
+      attacksLeft: { type: int, default: 0 }
+      initiative: { type: int, default: 0 }
+      defeated: { type: bool, default: false }
+    derived:
+      mod:
+        type: "map<ability,int>"
+        each: a
+        doc: Ability modifiers. 5e rounds down, so a 9 gives -1.
+        value: "floorDiv(self.ability[a] - 10, 2)"
+      pb: { type: int, value: "tables.proficiencyByCr[self.cr]" }
+      reach:
+        type: int
+        doc: The longest reach among the melee weapons it wields.
+        value: "self.wields.exists(w, !w.ranged) ? self.wields.filter(w, !w.ranged).map(w, w.reach).max() : 0"
+    checks:
+      - { that: "self.cr in tables.proficiencyByCr", message: the challenge rating is not in the CR table }
+      - { that: "self.speed >= 0 && self.speed % 5 == 0", message: speed must be a multiple of 5 feet }
+      - { that: "self.hitDice >= 1", message: a creature has at least one Hit Die }
+
+  weapon:
+    fields:
+      name: string
+      ability: ability
+      dice: int
+      die: int
+      damageType: damageType
+      ranged: { type: bool, default: false }
+      reach: { type: int, default: 5 }
+      range: { type: int, default: 0 }
+      longRange: { type: int, default: 0 }
+      exposes:
+        type: bool
+        default: false
+        doc: On a hit, the next attack roll against the target before the attacker's next turn has Advantage.
+    derived:
+      maxRange: { type: int, value: "self.ranged ? self.longRange : self.reach" }
+    checks:
+      - { that: "self.dice >= 1 && self.die >= 2", message: a weapon rolls at least one die }
+      - { that: "!self.ranged || (self.range > 0 && self.longRange >= self.range)", message: a ranged weapon needs a normal and a long range }
+
+signals:
+  turn.start: { params: { actor: creature } }
+  turn.end: { params: { actor: creature } }
+  attack.hit: { params: { attacker: creature, target: creature, weapon: weapon, critical: bool } }
+  attack.miss: { params: { attacker: creature, target: creature, weapon: weapon } }
+
+reactions:
+  - on: turn.start
+    do:
+      - set: { actor.attacksLeft: 0 }
+  - on: hp.empty
+    do:
+      - set: { target.defeated: true }
+
+procedures:
+  strike:
+    doc: One weapon attack, from the roll to the damage.
+    params: { attacker: creature, weapon: weapon, target: creature }
+    do:
+      - let:
+          advantage: "target.exposures.size() > 0"
+          # Ranged attacks have Disadvantage beyond normal range, or with an enemy within 5 feet.
+          disadvantage: >-
+            weapon.ranged && (distance(attacker.pos, target.pos) > weapon.range
+              || all.creature.exists(c, c.side != attacker.side && !c.defeated && distance(c.pos, attacker.pos) <= 5))
+      - each: used
+        in: target.exposures
+        do:
+          - destroy: used
+      - call: d20Test
+        with:
+          bonus: "attacker.pb + attacker.mod[weapon.ability]"
+          mode: "(advantage ? 1 : 0) - (disadvantage ? 1 : 0)"
+        as: { natural: natural, total: total }
+      # A 20 on the die always hits and is a Critical Hit; a 1 always misses.
+      - if: "natural != 1 && (natural == 20 || total >= target.ac)"
+        then:
+          - roll: { as: damage, n: "weapon.dice * (natural == 20 ? 2 : 1)", d: weapon.die }
+          - emit: attack.hit
+            with: { attacker: attacker, target: target, weapon: weapon, critical: "natural == 20" }
+          - emit: hp.lose
+            with: { target: target, amount: "max(0, damage + attacker.mod[weapon.ability])" }
+          - if: "weapon.exposes && !target.defeated"
+            then:
+              - create: { kind: exposure, as: mark, fields: { source: attacker } }
+              - link: { rel: exposureOn, from: mark, to: target }
+        else:
+          - emit: attack.miss
+            with: { attacker: attacker, target: target, weapon: weapon }
+
+intents:
+  move:
+    doc: Move one square. Leaving an enemy's reach gives it an Opportunity Attack first.
+    params:
+      actor: creature
+      to: { type: cell, in: "neighbors(actor.pos)" }
+    gate:
+      - "actor.movement >= 5"
+      - "!all.creature.exists(c, !c.defeated && c.pos == to)"
+    effects:
+      - each: foe
+        in: >-
+          all.creature.filter(c, c.side != actor.side && !c.defeated && c.reaction > 0 && c.reach > 0
+            && distance(c.pos, actor.pos) <= c.reach && distance(c.pos, to) > c.reach)
+        do:
+          - if: "!actor.defeated"
+            then:
+              - prompt:
+                  seat: foe.seat
+                  with: { actor: foe, target: actor }
+                  offer: [reaction]
+      - if: "!actor.defeated"
+        then:
+          - set: { actor.pos: to, actor.movement: "actor.movement - 5" }
+
+  attack:
+    doc: Attack with a wielded weapon. The first attack of a turn spends the action.
+    params:
+      actor: creature
+      weapon: { type: weapon, in: actor.wields }
+      target: { type: creature, in: "all.creature.filter(c, c.side != actor.side && !c.defeated)" }
+    gate:
+      - "actor.attacksLeft > 0 || actor.action > 0"
+      - "distance(actor.pos, target.pos) <= weapon.maxRange"
+      - "lineOfSight(actor.pos, target.pos)"
+    effects:
+      - if: "actor.attacksLeft == 0"
+        then:
+          - set: { actor.action: "actor.action - 1", actor.attacksLeft: actor.attacksPerAction }
+      - set: { actor.attacksLeft: "actor.attacksLeft - 1" }
+      - call: strike
+        with: { attacker: actor, weapon: weapon, target: target }
+
+  dash:
+    doc: Spend the action for extra movement equal to Speed.
+    params: { actor: creature }
+    gate: "actor.action > 0"
+    effects:
+      - set: { actor.action: "actor.action - 1", actor.movement: "actor.movement + actor.speed" }
+
+  endTurn:
+    params: { actor: creature }
+    effects:
+      - done: true
+
+  opportunityAttack:
+    doc: A reaction - one melee attack against a creature leaving reach.
+    params:
+      actor: creature
+      target: creature
+      weapon: { type: weapon, in: "actor.wields.filter(w, !w.ranged)" }
+    gate: "actor.reaction > 0"
+    effects:
+      - set: { actor.reaction: "actor.reaction - 1" }
+      - call: strike
+        with: { attacker: actor, weapon: weapon, target: target }
+
+  holdReaction:
+    doc: Let the creature go.
+    params: { actor: creature }
+    effects: []
+
+menus:
+  turn: [attack, move, dash, endTurn]
+  reaction: [opportunityAttack, holdReaction]
+
+flow:
+  # Initiative: a Dexterity check each, highest first, ties to the higher Dexterity.
+  - each: combatant
+    in: all.creature
+    do:
+      - roll: { as: d20, d: 20 }
+      - set: { combatant.initiative: "d20 + combatant.mod['dex']" }
+  - while: true
+    do:
+      - set: { game.round: "game.round + 1" }
+      - each: actor
+        in: "sortBy(all.creature, all.creature.map(c, -(c.initiative * 100 + c.ability['dex'])))"
+        do:
+          - if: "!actor.defeated"
+            then:
+              - emit: turn.start
+                with: { actor: actor }
+              - prompt:
+                  seat: actor.seat
+                  with: { actor: actor }
+                  offer: [turn]
+                  repeat: true
+              - emit: turn.end
+                with: { actor: actor }
+
+behaviors:
+  hunter:
+    doc: Closes with the nearest enemy and bites.
+    scores:
+      attack: 100
+      opportunityAttack: 100
+      move: >-
+        cel.bind(foes, all.creature.filter(c, c.side != actor.side && !c.defeated),
+          foes.map(c, distance(actor.pos, c.pos)).min() <= actor.reach
+            ? -1
+            : (foes.map(c, distance(actor.pos, c.pos)).min() - foes.map(c, distance(to, c.pos)).min()) * 2)
+      dash: >-
+        actor.movement == 0 && !all.creature.exists(c, c.side != actor.side && !c.defeated
+          && distance(actor.pos, c.pos) <= actor.reach) ? 30 : -1
+      endTurn: 0
+      holdReaction: 0
+
+  skirmisher:
+    doc: Keeps its distance and shoots; fights hand to hand once bloodied.
+    scores:
+      attack: >-
+        !weapon.ranged ? 80
+          : all.creature.exists(c, c.side != actor.side && !c.defeated && distance(c.pos, actor.pos) <= 5) ? 40
+          : distance(actor.pos, target.pos) > weapon.range ? 60
+          : 100
+      opportunityAttack: 90
+      move: >-
+        cel.bind(foes, all.creature.filter(c, c.side != actor.side && !c.defeated),
+          foes.map(c, distance(actor.pos, c.pos)).min() < 30
+            && foes.map(c, distance(to, c.pos)).min() > foes.map(c, distance(actor.pos, c.pos)).min()
+            ? 120 : -5)
+      dash: -1
+      endTurn: 1
+      holdReaction: 0
+    goals:
+      - name: stand and fight
+        when: "actor.hp * 2 <= actor.hpMax"
+        scale: { move: 0 }

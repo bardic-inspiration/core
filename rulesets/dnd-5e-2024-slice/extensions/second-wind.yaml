@@ -1,0 +1,31 @@
+# A homebrew layer: any creature can catch its breath once. It adds a field,
+# an intent, a menu entry, and behavior scores, all of which the base marks
+# open. It could not change how the base derives or resolves anything.
+format: 1
+extension: { id: second-wind, version: 0.1.0, title: Second Wind for everyone }
+extends: { id: dnd-5e-2024-slice, version: 0.1.0 }
+
+kinds:
+  creature:
+    fields:
+      secondWinds: { type: int, default: 1 }
+
+intents:
+  secondWind:
+    doc: Once bloodied, spend the action to regain 1d10 + 1 hit points.
+    params: { actor: creature }
+    gate:
+      - "actor.action > 0 && actor.secondWinds > 0"
+      - "actor.hp * 2 <= actor.hpMax"
+    effects:
+      - roll: { as: healed, d: 10 }
+      - set: { actor.action: "actor.action - 1", actor.secondWinds: "actor.secondWinds - 1" }
+      - emit: hp.gain
+        with: { target: actor, amount: "healed + 1" }
+
+menus:
+  turn: [secondWind]
+
+behaviors:
+  hunter: { scores: { secondWind: 150 } }
+  skirmisher: { scores: { secondWind: 150 } }
