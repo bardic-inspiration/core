@@ -1,0 +1,67 @@
+# A tiny tick-driven sandbox of self-assembling bots, kept as a test fixture.
+# It has no grid, no turns, and no combat: bots salvage parts from a pile and
+# split into new bots, so state grows during play. It exercises what the two
+# shipped rulesets do not: a tick scheduler, and the slots and stacking patterns.
+format: 1
+ruleset: { id: junkyard, version: 0.1.0 }
+
+uses:
+  - pattern: slots
+    with: { relation: mounts, holder: bot, item: part, inverse: mountedOn, capacity: self.sockets }
+  - pattern: stacking
+    with: { kind: bot, name: power, base: 1, source: "self.mounts.map(p, p.power)", rule: sum }
+  - pattern: stacking
+    with: { kind: bot, name: armor, base: 0, source: "self.mounts.map(p, p.armor)", rule: max }
+
+globals:
+  tick: { type: int, default: 0 }
+  scrap: { type: int, default: 6 }
+
+kinds:
+  bot:
+    fields:
+      seat: seat
+      sockets: { type: int, default: 2 }
+  part:
+    fields:
+      power: int
+      armor: int
+
+intents:
+  salvage:
+    params: { bot: bot }
+    gate: "game.scrap > 0 && bot.mounts.size() < bot.sockets"
+    effects:
+      - roll: { as: power, d: 6 }
+      - roll: { as: armor, d: 4 }
+      - create: { kind: part, as: found, fields: { power: power, armor: armor } }
+      - link: { rel: mounts, from: bot, to: found }
+      - set: { game.scrap: "game.scrap - 1" }
+  split:
+    params:
+      bot: bot
+      part: { type: part, in: bot.mounts }
+    gate: "bot.mounts.size() == bot.sockets && all.bot.size() < 4"
+    effects:
+      - create: { kind: bot, as: child, fields: { seat: bot.seat } }
+      - unlink: { rel: mounts, from: bot, to: part }
+      - link: { rel: mounts, from: child, to: part }
+  idle:
+    params: { bot: bot }
+    effects: []
+
+flow:
+  - while: true
+    do:
+      - set: { game.tick: "game.tick + 1" }
+      - each: bot
+        in: all.bot
+        do:
+          - prompt:
+              seat: bot.seat
+              with: { bot: bot }
+              offer: [salvage, split, idle]
+
+behaviors:
+  builder:
+    scores: { split: 3, salvage: 2, idle: 1 }

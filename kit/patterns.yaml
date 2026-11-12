@@ -1,0 +1,149 @@
+# The pattern kit: the named game patterns most rulesets share, written as
+# data. A pattern is a template; a ruleset `uses` it with arguments, and the
+# compiler substitutes ${param} and merges what it emits into that layer.
+# Nothing here is special to the runtime: each pattern expands to the same
+# kinds, signals, reactions, and procedures a ruleset could write by hand.
+format: 1
+kit: { id: core-kit, version: 0.1.0 }
+
+patterns:
+  pool:
+    doc: >-
+      A resource pool, such as hit points. Emits the current value, its
+      derived maximum, and lose/gain signals that keep it between 0 and the
+      maximum. `<name>.empty` fires when a loss takes it to 0.
+    params:
+      kind: { doc: The kind that carries the pool. }
+      name: { doc: The pool's field name. }
+      max: { doc: Expression over `self` for the maximum. }
+    emits:
+      kinds:
+        ${kind}:
+          fields:
+            ${name}: { type: int, init: "self.${name}Max" }
+          derived:
+            ${name}Max: { type: int, value: "${max}" }
+          checks:
+            - that: "self.${name} >= 0 && self.${name} <= self.${name}Max"
+              message: "${name} must be between 0 and its maximum"
+      signals:
+        ${name}.lose: { params: { target: "${kind}", amount: int } }
+        ${name}.gain: { params: { target: "${kind}", amount: int } }
+        ${name}.empty: { params: { target: "${kind}" } }
+      reactions:
+        - on: ${name}.lose
+          do:
+            - set: { "target.${name}": "max(0, target.${name} - max(0, amount))" }
+            - if: "target.${name} == 0"
+              then:
+                - { emit: "${name}.empty", with: { target: target } }
+        - on: ${name}.gain
+          do:
+            - set: { "target.${name}": "min(target.${name}Max, target.${name} + max(0, amount))" }
+
+  budget:
+    doc: >-
+      A per-turn budget, such as movement or an action. Emits the amount left
+      and refills it whenever the given signal fires for the entity.
+    params:
+      kind: { doc: The kind that carries the budget. }
+      name: { doc: The budget's field name. }
+      amount: { doc: Expression over `self` for a full budget. }
+      signal: { doc: The signal that refills it. }
+      who: { doc: The signal param that names the entity. }
+    emits:
+      kinds:
+        ${kind}:
+          fields:
+            ${name}: { type: int, default: 0 }
+          derived:
+            ${name}Max: { type: int, value: "${amount}" }
+      reactions:
+        - on: ${signal}
+          do:
+            - set: { "${who}.${name}": "${who}.${name}Max" }
+
+  check:
+    doc: >-
+      A die test: one die plus a bonus, rolled twice keeping the higher or
+      lower when `mode` is positive or negative. Emits a procedure returning
+      the natural roll and the total; the caller compares it to a target.
+    params:
+      name: { doc: The procedure's name. }
+      sides: { doc: The die's sides., default: 20 }
+    emits:
+      procedures:
+        ${name}:
+          params: { bonus: int, mode: int }
+          returns: { natural: int, total: int }
+          do:
+            - roll: { as: natural, d: "${sides}" }
+            - if: "mode != 0"
+              then:
+                - roll: { as: second, d: "${sides}" }
+                - let: { natural: "mode > 0 ? max(natural, second) : min(natural, second)" }
+            - let: { total: "natural + bonus" }
+
+  duration:
+    doc: >-
+      A timed marker on an entity, such as a condition that lasts until its
+      source's next turn. Emits the marker kind, the relation that attaches it,
+      and a reaction that removes it when the signal fires for its source.
+    params:
+      name: { doc: The marker kind. }
+      target: { doc: The kind a marker attaches to. }
+      owner: { doc: The kind of a marker's source. }
+      inverse: { doc: Name under which a target reads its markers. }
+      signal: { doc: The signal that ends the marker. }
+      who: { doc: The signal param compared to the marker's source. }
+    emits:
+      kinds:
+        ${name}:
+          fields:
+            source: "${owner}"
+      relations:
+        ${name}On: { from: "${name}", to: "${target}", inverse: "${inverse}" }
+      reactions:
+        - on: ${signal}
+          do:
+            - each: expired
+              in: "all.${name}.filter(m, m.source == ${who})"
+              do:
+                - destroy: expired
+
+  slots:
+    doc: >-
+      A relation with limited capacity, such as hands that wield or sockets
+      that hold parts. Emits the relation and a check on the holder.
+    params:
+      relation: { doc: The relation's name. }
+      holder: { doc: The kind that has the slots. }
+      item: { doc: The kind that fills them. }
+      inverse: { doc: Name under which an item reads its holders. }
+      capacity: { doc: Expression over `self` for how many fit. }
+    emits:
+      relations:
+        ${relation}: { from: "${holder}", to: "${item}", inverse: "${inverse}" }
+      kinds:
+        ${holder}:
+          checks:
+            - that: "self.${relation}.size() <= ${capacity}"
+              message: "${relation} holds at most ${capacity}"
+
+  stacking:
+    doc: >-
+      How several modifiers to one value combine: summed, or only the highest
+      or lowest counted. Emits a derived value.
+    params:
+      kind: { doc: The kind that carries the value. }
+      name: { doc: The derived value's name. }
+      base: { doc: Expression over `self` for the unmodified value. }
+      source: { doc: Expression over `self` for the list of modifiers. }
+      rule: { doc: "sum, max, or min.", default: sum }
+    emits:
+      kinds:
+        ${kind}:
+          derived:
+            ${name}:
+              type: int
+              value: "(${base}) + ((${source}).size() > 0 ? (${source}).${rule}() : 0)"

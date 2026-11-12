@@ -1,0 +1,105 @@
+# English draughts. A closed game written in the open-game format: nothing is
+# authored during play, and the scenario declares the end.
+format: 1
+ruleset: { id: checkers, version: 0.1.0, title: Checkers (English draughts) }
+
+seats: [red, black]
+
+space: { grid: square, adjacency: 8, width: 8, height: 8 }
+
+globals:
+  chain: { type: string, default: "", doc: "The piece that must keep jumping, if any." }
+  blocked: { type: string, default: "", doc: The seat that had no legal move. }
+  quiet: { type: int, default: 0, doc: King moves since the last capture or man move. }
+
+kinds:
+  piece:
+    fields:
+      owner: seat
+      pos: cell
+      king: { type: bool, default: false }
+    derived:
+      forward: { type: int, value: "self.owner == 'red' ? 1 : -1" }
+      farRow: { type: int, value: "self.owner == 'red' ? space.height - 1 : 0" }
+      steps:
+        type: list<cell>
+        doc: The empty squares this piece can step to.
+        value: >-
+          [self.pos.offset(1, 1), self.pos.offset(-1, 1), self.pos.offset(1, -1), self.pos.offset(-1, -1)]
+          .filter(t, inBounds(t)
+            && (self.king || (t.y - self.pos.y) * self.forward > 0)
+            && !all.piece.exists(p, p.pos == t))
+      jumps:
+        type: list<cell>
+        doc: The squares this piece can land on by jumping an enemy.
+        value: >-
+          [self.pos.offset(2, 2), self.pos.offset(-2, 2), self.pos.offset(2, -2), self.pos.offset(-2, -2)]
+          .filter(t, inBounds(t)
+            && (self.king || (t.y - self.pos.y) * self.forward > 0)
+            && !all.piece.exists(p, p.pos == t)
+            && all.piece.exists(p, p.pos == self.pos.mid(t) && p.owner != self.owner))
+    checks:
+      - that: "inBounds(self.pos) && (self.pos.x + self.pos.y) % 2 == 0"
+        message: a piece stands on a dark square of the board
+      - that: "all.piece.filter(p, p.pos == self.pos).size() == 1"
+        message: two pieces cannot share a square
+
+intents:
+  jump:
+    doc: Capture by jumping. A piece that can jump again must.
+    params:
+      piece: { type: piece, in: "all.piece.filter(p, p.owner == seat && (game.chain == '' || p.id == game.chain))" }
+      to: { type: cell, in: piece.jumps }
+    effects:
+      - each: captured
+        in: "all.piece.filter(p, p.pos == piece.pos.mid(to))"
+        do:
+          - destroy: captured
+      - set: { piece.pos: to, game.quiet: 0 }
+      - if: "!piece.king && to.y == piece.farRow"
+        then:
+          - set: { piece.king: true, game.chain: "''" }
+          - done: true
+        else:
+          - if: "piece.jumps.size() > 0"
+            then:
+              - set: { game.chain: piece.id }
+            else:
+              - set: { game.chain: "''" }
+              - done: true
+
+  step:
+    doc: Move one square diagonally. Not allowed while any capture is available.
+    params:
+      piece: { type: piece, in: "all.piece.filter(p, p.owner == seat)" }
+      to: { type: cell, in: piece.steps }
+    gate:
+      - "game.chain == ''"
+      - "!all.piece.exists(p, p.owner == seat && p.jumps.size() > 0)"
+    effects:
+      - set: { game.quiet: "piece.king ? game.quiet + 1 : 0" }
+      - set: { piece.pos: to }
+      - if: "!piece.king && to.y == piece.farRow"
+        then:
+          - set: { piece.king: true }
+      - done: true
+
+flow:
+  - while: true
+    do:
+      - each: player
+        in: seats
+        do:
+          - prompt:
+              seat: player
+              offer: [jump, step]
+              repeat: true
+              ifNone:
+                - set: { game.blocked: player }
+
+behaviors:
+  simple:
+    doc: Takes captures, likes crowning, otherwise moves at random.
+    scores:
+      jump: "10 + (to.y == piece.farRow ? 5 : 0)"
+      step: "1 + (!piece.king && to.y == piece.farRow ? 5 : 0)"

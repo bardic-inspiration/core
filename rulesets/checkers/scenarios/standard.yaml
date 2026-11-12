@@ -1,0 +1,44 @@
+# The standard starting position. The end conditions live here, not in the
+# ruleset: a player who cannot move loses, and forty quiet king moves draw.
+format: 1
+scenario: { id: standard, title: Standard game }
+ruleset: { id: checkers, version: 0.1.0 }
+
+seats:
+  red: { behavior: simple }
+  black: { behavior: simple }
+
+entities:
+  - { id: red1, kind: piece, fields: { owner: red, pos: [0, 0] } }
+  - { id: red2, kind: piece, fields: { owner: red, pos: [2, 0] } }
+  - { id: red3, kind: piece, fields: { owner: red, pos: [4, 0] } }
+  - { id: red4, kind: piece, fields: { owner: red, pos: [6, 0] } }
+  - { id: red5, kind: piece, fields: { owner: red, pos: [1, 1] } }
+  - { id: red6, kind: piece, fields: { owner: red, pos: [3, 1] } }
+  - { id: red7, kind: piece, fields: { owner: red, pos: [5, 1] } }
+  - { id: red8, kind: piece, fields: { owner: red, pos: [7, 1] } }
+  - { id: red9, kind: piece, fields: { owner: red, pos: [0, 2] } }
+  - { id: red10, kind: piece, fields: { owner: red, pos: [2, 2] } }
+  - { id: red11, kind: piece, fields: { owner: red, pos: [4, 2] } }
+  - { id: red12, kind: piece, fields: { owner: red, pos: [6, 2] } }
+  - { id: black1, kind: piece, fields: { owner: black, pos: [1, 5] } }
+  - { id: black2, kind: piece, fields: { owner: black, pos: [3, 5] } }
+  - { id: black3, kind: piece, fields: { owner: black, pos: [5, 5] } }
+  - { id: black4, kind: piece, fields: { owner: black, pos: [7, 5] } }
+  - { id: black5, kind: piece, fields: { owner: black, pos: [0, 6] } }
+  - { id: black6, kind: piece, fields: { owner: black, pos: [2, 6] } }
+  - { id: black7, kind: piece, fields: { owner: black, pos: [4, 6] } }
+  - { id: black8, kind: piece, fields: { owner: black, pos: [6, 6] } }
+  - { id: black9, kind: piece, fields: { owner: black, pos: [1, 7] } }
+  - { id: black10, kind: piece, fields: { owner: black, pos: [3, 7] } }
+  - { id: black11, kind: piece, fields: { owner: black, pos: [5, 7] } }
+  - { id: black12, kind: piece, fields: { owner: black, pos: [7, 7] } }
+
+end:
+  - when: "game.blocked != ''"
+    outcome:
+      result: "'win'"
+      winner: "seats.filter(s, s != game.blocked).first()"
+  - when: "game.quiet >= 40"
+    outcome:
+      result: "'draw'"
