@@ -9,6 +9,7 @@ const key = (cell: Point) => `${cell.x},${cell.y}`;
 export function createGridHost(map: SpaceMap): SpaceHost {
   const { unit, width, height } = map;
   const diagonal = map.adjacency === 8;
+  const closed = map.corners === 'closed';
   const blocksMove = new Set(map.blocksMove.map(key));
   const blocksSight = new Set(map.blocksSight.map(key));
   const values = new Map(map.cells.map((cell) => [key(cell), cell.values]));
@@ -34,7 +35,11 @@ export function createGridHost(map: SpaceMap): SpaceHost {
   return {
     inBounds: open,
     distance: (a, b) => steps(a, b) * unit,
-    neighbors: (cell) => cellsWithin(cell, unit).filter((other) => other.x !== cell.x || other.y !== cell.y),
+    neighbors: (cell) => cellsWithin(cell, unit).filter((other) =>
+      (other.x !== cell.x || other.y !== cell.y)
+      // Closed corners: a diagonal step is cut off by a blocking cell on either side of it.
+      && !(closed && other.x !== cell.x && other.y !== cell.y
+        && (blocksMove.has(key({ x: other.x, y: cell.y })) || blocksMove.has(key({ x: cell.x, y: other.y }))))),
     cellsWithin,
     // Walks the line between the two cells; a sight-blocking cell strictly between them breaks it.
     lineOfSight: (a, b) => {

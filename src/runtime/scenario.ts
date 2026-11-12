@@ -6,17 +6,20 @@ import { versionSatisfies } from '../compile/layers.ts';
 import { CompileError, RuleError, type Compiled, type Registry } from '../compile/program.ts';
 import { FORMAT_VERSION, type ScenarioDoc } from '../format.ts';
 import { createGridHost, noSpace } from '../host/grid.ts';
-import type { CellValues, Point, SpaceHost, SpaceMap } from '../lib/functions.ts';
+import type { SpaceHost, SpaceMap } from '../lib/functions.ts';
 import { schemaIssues, validators, type Issue } from '../schemas.ts';
 import { instantiate } from './instantiate.ts';
+import { buildMap, fitsRuleset, listedCells, loadMap, patchMap } from './map.ts';
 import { Session, invalid, normalize, type World } from './session.ts';
 import { apply, emptyState, type State, type Value, type Write } from './state.ts';
 
 export interface Scenario {
   doc: ScenarioDoc;
   world: World;
-  /** The map the host was given; absent when the ruleset has no space. */
+  /** The map as the scenario gives it; absent when the ruleset has no space. */
   map?: SpaceMap;
+  /** The map as it stands in a state: with what play has changed laid over it. For drawing any point of a match. */
+  mapAt(state: State): SpaceMap | undefined;
   /** The writes that build the starting state, in order. */
   setup: Write[];
   end: { when: Compiled; outcome: { name: string; value: Compiled }[] }[];
@@ -26,49 +29,8 @@ export interface Scenario {
 export interface ScenarioOptions {
   /** The engine's space host, built from the map core works out. Absent: the reference grid host. */
   host?: (map: SpaceMap) => SpaceHost;
-}
-
-/** The map of a scenario: its cells' layer values, and where the ruleset's space rules say movement and sight are blocked. */
-function buildMap(
-  registry: Registry, world: World, space: ScenarioDoc['space'], width: number, height: number, issue: (path: string, message: string) => void,
-): SpaceMap {
-  const defaults = Object.fromEntries([...registry.cellLayers.values()].map((layer) => [layer.name, layer.default])) as CellValues;
-  const cells = new Map<string, { x: number; y: number; values: CellValues }>();
-  (space?.cells ?? []).forEach((cell, index) => {
-    const { at: [x, y], ...given } = cell;
-    const path = `space.cells.${index}`;
-    if (x < 0 || y < 0 || x >= width || y >= height) return issue(`${path}.at`, `(${x}, ${y}) is off the map`);
-    if (cells.has(`${x},${y}`)) return issue(`${path}.at`, `(${x}, ${y}) is given twice`);
-    for (const [name, value] of Object.entries(given)) {
-      const layer = registry.cellLayers.get(name);
-      const reason = layer ? invalid(registry, world, emptyState(), layer.type, value) : 'the ruleset declares no such cell layer';
-      if (reason) issue(`${path}.${name}`, reason);
-    }
-    cells.set(`${x},${y}`, { x, y, values: { ...defaults, ...given } as CellValues });
-  });
-
-  const where = (rule: 'blocksMove' | 'blocksSight'): Point[] => {
-    const compiled = registry[rule];
-    if (!compiled) return [];
-    const holds = (values: CellValues) => compiled.run({ cell: registry.cellData(values), tables: registry.tables }) === true;
-    const found: Point[] = [];
-    try {
-      const everywhere = holds(defaults);
-      for (let y = 0; y < height; y++) {
-        for (let x = 0; x < width; x++) {
-          const cell = cells.get(`${x},${y}`);
-          if (cell ? holds(cell.values) : everywhere) found.push({ x, y });
-        }
-      }
-    } catch (error) {
-      issue('space', `${compiled.path}: ${(error as Error).message.split('\n')[0]}`);
-    }
-    return found;
-  };
-  return {
-    grid: 'square', adjacency: registry.space.adjacency ?? 8, unit: registry.space.unit ?? 1, width, height,
-    defaults, cells: [...cells.values()], blocksMove: where('blocksMove'), blocksSight: where('blocksSight'),
-  };
+  /** The map documents a scenario may name with `map`, by id. Plain data, as parsed. */
+  maps?: Record<string, unknown>;
 }
 
 export function loadScenario(registry: Registry, raw: unknown, options: ScenarioOptions = {}): Scenario {
@@ -89,17 +51,57 @@ export function loadScenario(registry: Registry, raw: unknown, options: Scenario
 
   let map: SpaceMap | undefined;
   let world: World = { host: noSpace, space: { width: 0, height: 0, unit: 1 }, seats };
-  if (registry.space.grid === 'square') {
+  const play = (on: SpaceMap) => {
+    map = on;
+    world = { host: noSpace, space: { width: on.width, height: on.height, unit: on.unit }, seats };
+    if (on.grid !== 'square') return;
+    // The ground of a state is the map with the state's overlay on it. A host is built once per overlay.
+    const make = options.host ?? createGridHost;
+    const untouched = { map: on, host: make(on) };
+    const patched = new WeakMap<object, { map: SpaceMap; host: SpaceHost }>();
+    world.host = untouched.host;
+    world.ground = (overlay) => {
+      if (Object.keys(overlay).length === 0) return untouched;
+      let ground = patched.get(overlay);
+      if (!ground) {
+        const now = patchMap(registry, on, overlay);
+        ground = { map: now, host: make(now) };
+        patched.set(overlay, ground);
+      }
+      return ground;
+    };
+  };
+  const standard = registry.space.map;
+  const named = doc.map ?? (doc.space ? undefined : standard?.standard);
+  if (standard?.only && (doc.space || named !== standard.standard)) {
+    issue(doc.space ? 'space' : 'map', `the ruleset is played on its standard map, "${standard.standard}", and no other`);
+  } else if (named !== undefined) {
+    const raw = options.maps?.[named];
+    const path = doc.map === undefined ? 'space' : 'map';
+    if (doc.space) issue('space', 'the scenario names a map, so it gives no space of its own');
+    else if (raw === undefined) issue(path, doc.map === undefined ? `the ruleset's standard map, "${named}", was not given` : `no map "${named}" was given`);
+    else {
+      try {
+        const loaded = loadMap(registry, raw);
+        if (loaded.id !== named) issue(path, `the map given as "${named}" calls itself "${loaded.id}"`);
+        else play(loaded);
+      } catch (error) {
+        if (!(error instanceof CompileError)) throw error;
+        issues.push(...error.issues);
+      }
+    }
+  } else if (registry.hasSpace) {
     const width = doc.space?.width ?? registry.space.width;
     const height = doc.space?.height ?? registry.space.height;
-    if (width === undefined || height === undefined) issue('space', 'the ruleset has a grid, so the scenario must give its width and height');
-    else if ((registry.space.width ?? width) !== width || (registry.space.height ?? height) !== height) issue('space', 'the ruleset fixes the grid size');
-    else {
+    if (width === undefined || height === undefined) issue('space', 'the ruleset has a space, so the scenario must name a map or give a width and height');
+    else if (registry.space.grid === 'none' && doc.space?.cells) issue('space.cells', 'the ruleset has no grid, so its maps have no cells');
+    else if (fitsRuleset(registry, width, height, issue, 'space')) {
       const before = issues.length;
-      map = buildMap(registry, world, doc.space, width, height, issue);
+      const content = { cells: listedCells(doc.space?.cells, 'space.cells'), places: doc.space?.places, placesPath: 'space.places' };
+      const built = buildMap(registry, width, height, content, issue);
       // A refused map is never handed to a host.
-      const host = issues.length > before ? noSpace : (options.host ?? createGridHost)(map);
-      world = { host, space: { width, height, unit: map.unit }, seats };
+      if (issues.length === before) play(built);
+      else world = { host: noSpace, space: { width, height, unit: built.unit }, seats };
     }
   } else if (doc.space) issue('space', 'the ruleset declares no space');
 
@@ -123,10 +125,20 @@ export function loadScenario(registry: Registry, raw: unknown, options: Scenario
     }
   }
 
+  // A cell field may be given as the name of a place on the map: the entity stands at that place.
+  const placed = (kind: string, fields: Record<string, unknown>, path: string): Record<string, unknown> =>
+    Object.fromEntries(Object.entries(fields).map(([name, value]) => {
+      if (typeof value !== 'string' || registry.kinds.get(kind)?.fields.get(name)?.type.k !== 'cell') return [name, value];
+      const place = map?.places[value];
+      if (!place) issue(`${path}.fields.${name}`, `the map has no place called "${value}"`);
+      return [name, place ? [place.x, place.y] : value];
+    }));
+
   (doc.entities ?? []).forEach((entity, index) => {
     const id = entity.id ?? `${entity.kind}#${state.nextId}`;
     try {
-      write({ t: 'create', id, kind: entity.kind, fields: instantiate(registry, world, state, entity.kind, id, entity.fields ?? {}) });
+      const fields = placed(entity.kind, entity.fields ?? {}, `entities.${index}`);
+      write({ t: 'create', id, kind: entity.kind, fields: instantiate(registry, world, state, entity.kind, id, fields) });
     } catch (error) {
       if (!(error instanceof RuleError)) throw error;
       issue(`entities.${index}`, error.message);
@@ -163,5 +175,7 @@ export function loadScenario(registry: Registry, raw: unknown, options: Scenario
   });
 
   if (issues.length > 0) throw new CompileError(issues);
-  return { doc, world, map, end, setup, maxDecisions: doc.limits?.maxDecisions ?? 10000 };
+  const ground = world.ground;
+  const mapAt = (at: State) => (ground ? ground(at.ground ?? {}).map : map);
+  return { doc, world, map, mapAt, end, setup, maxDecisions: doc.limits?.maxDecisions ?? 10000 };
 }

@@ -2,10 +2,10 @@ import { readFileSync } from 'node:fs';
 import { parse } from 'yaml';
 import { existsSync, readdirSync } from 'node:fs';
 import {
-  bindSeats, compile, compileBehaviors, compileExpression, loadScenario, Match,
+  bindSeats, compile, compileBehaviors, compileExpression, loadScenario as loadScenarioWith, Match,
   type Behaviors, type BehaviorSetDoc, type Registry, type Scenario, type Seat, type State,
 } from '../src/index.ts';
-import { loadKit, readYaml } from '../src/load.ts';
+import { loadKit, readMaps, readYaml } from '../src/load.ts';
 
 export const fixture = (name: string): any => parse(readFileSync(new URL(`./fixtures/${name}.yaml`, import.meta.url), 'utf8'));
 
@@ -92,7 +92,9 @@ export function refusal(run: () => unknown): string {
   }
 }
 
-export { loadScenario };
+/** Loads a scenario with the maps that ship for its ruleset on hand, unless others are given. */
+export const loadScenario = (registry: Registry, doc: unknown, options: Parameters<typeof loadScenarioWith>[2] = {}): Scenario =>
+  loadScenarioWith(registry, doc, { maps: readMaps(registry.id), ...options });
 
 /** Advances to the next decision and takes the first option matching `want`; fails if none does. */
 export function choose(match: Match, seat: string, intent: string, want: Record<string, unknown> = {}): void {

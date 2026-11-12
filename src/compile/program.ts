@@ -71,6 +71,7 @@ export type Fx =
   | { op: 'let'; vars: (Binding & { type: ValueType })[] }
   | { op: 'roll'; as: string; n?: Compiled; d: Compiled }
   | { op: 'set'; writes: { target: SetTarget; value: Compiled }[] }
+  | { op: 'ground'; at: Compiled; writes: { layer: string; type: ValueType; value: Compiled }[] }
   | { op: 'create'; kind: string; as?: string; fields: Binding[] }
   | { op: 'destroy'; target: Compiled }
   | { op: 'link' | 'unlink'; rel: string; from: Compiled; to: Compiled }
@@ -122,6 +123,8 @@ export interface CellLayerSpec {
   name: string;
   type: ValueType;
   default: Value;
+  /** Whether play may write it. */
+  mutable: boolean;
 }
 
 export interface AddressInfo {
@@ -139,6 +142,8 @@ export interface Registry {
   seats?: string[];
   enums: Map<string, string[]>;
   space: SpaceDoc;
+  /** False when the ruleset has no `space` at all. A space may have no grid: a plane with a size and places. */
+  hasSpace: boolean;
   globals: Map<string, FieldSpec>;
   kinds: Map<string, KindSpec>;
   relations: Map<string, { from: string; to: string }>;
@@ -149,6 +154,8 @@ export interface Registry {
   cellLayers: Map<string, CellLayerSpec>;
   blocksMove?: Compiled;
   blocksSight?: Compiled;
+  /** The messages of every `space.checks` entry a cell with these layer values fails. */
+  cellFails(values: Record<string, Value>): string[];
   /** Every effect list by id; `flow` is the scheduler. */
   blocks: Map<string, Fx[]>;
   /** Every fact the ruleset allows to exist, by address. */

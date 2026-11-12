@@ -1,6 +1,6 @@
 # The format
 
-How a ruleset, an extension, a behavior set, and a scenario are written. This
+How a ruleset, an extension, a behavior set, a map, and a scenario are written. This
 is format version 2 (`format: 2`); each ruleset carries its own `version`.
 Format 2 moved behaviors out of rulesets and replaced a scenario's list of
 blocked cells with cell layers.
@@ -33,7 +33,11 @@ what it declares.
 | Signal, reaction | `signals`, `reactions` | A named moment, and effects that run when it is emitted. |
 | Procedure | `procedures` | A reusable effect list with params and returns. |
 | Flow | `flow` | The scheduler: the effect list the match runs from the start. |
-| Space | `space` | What is spatially possible, and what each cell holds. |
+| Space | `space` | What is spatially possible, and what each cell holds: the kind of map the ruleset is played on. |
+
+A map, the playing environment itself, is not part of a ruleset either. The
+ruleset's `space` says what a map is made of, and a map is a document that
+fills one in ([Maps](#maps)).
 
 Behaviors, the utility scores an AI seat chooses by, are not part of a
 ruleset. They are a document of their own, compiled against it
@@ -171,6 +175,7 @@ The closed set. Each effect is one of these.
 | Effect | Does |
 |---|---|
 | `set: { actor.hp: expr, game.round: expr }` | Writes fields, in order. A map entry is `actor.ability.str`, or `actor.slots[expr]` when the key is computed. |
+| `at: cell`, `set: { layer: expr }` | Writes layers of one cell of the map. Each layer must be declared `mutable`. |
 | `create: { kind, as, fields }` | Makes an instance and binds it. |
 | `destroy: expr` | Removes an entity and its links. |
 | `link` / `unlink: { rel, from, to }` | Joins or separates two entities. |
@@ -184,7 +189,7 @@ The closed set. Each effect is one of these.
 | `emit: signal`, `with` | Emits a signal; its reactions run in declaration order. |
 | `call: procedure`, `with`, `as` | Runs a procedure; `as` maps local names to its returns. |
 
-The first five are the writes, and each becomes one event in the log, as does
+The first six are the writes, and each becomes one event in the log, as does
 a `roll`. The rest only steer.
 
 ### Prompts and the flow
@@ -249,7 +254,7 @@ A behavior set is its own document, kept apart from the rules it plays:
 ```yaml
 format: 2
 behaviorSet: { id: default }
-ruleset: { id: dnd-5e-2024-slice, version: 0.3.0 }
+ruleset: { id: dnd-5e-2024-slice, version: 0.4.0 }
 behaviors:
   skirmisher:
     scores:
@@ -290,6 +295,7 @@ and `cast: *spellValue`). YAML merge keys (`<<`) are not read.
 space:
   grid: square
   adjacency: 8
+  corners: closed
   unit: 5
   increment: 5
   layers:
@@ -299,23 +305,143 @@ space:
   blocksSight: "cell.terrain == 'rock' || cell.cover >= 3"
 ```
 
-Core declares the rules of space; positions are ordinary `cell` fields, and
-geometry is the host's. A ruleset may fix `width` and `height`; otherwise the
-scenario gives them.
+`space` says what a map of this ruleset can be, and the rules the host
+respects on it. Core declares those rules; positions are ordinary `cell`
+fields, and geometry is the host's. A ruleset may fix `width` and `height`;
+otherwise the map gives them.
+
+A space need not have a grid. With `grid: none` it is a plane: it has a
+`unit`, and may have a `size`, `places`, and a standard `map`, and declares
+nothing about cells. Its maps hold a size and places, and no rule can ask a
+spatial question of it. Hold 'em's table is one. A ruleset with no `space`
+at all has no map.
+
+`adjacency` says whether a diagonal step is a step (8) or not (4). With
+`corners: closed`, a diagonal step may not pass the corner of a cell that
+blocks movement: it is not among `neighbors`. The default is `open`.
 
 `layers` declares what every cell holds: a typed attribute (`int`, `number`,
-`bool`, `string`, or an enum) with the value of a cell the scenario says
+`bool`, `string`, or an enum) with the value of a cell the map says
 nothing about. A rule reads a cell with `cellAt(c)`: `cellAt(to).cover`. The
 layers are its members, so a misspelt layer or a wrongly typed comparison
 fails the build. `cellAt` of a cell off the map is an error.
 
 `blocksMove` and `blocksSight` are the two rules the host respects. Each is a
 bool expression over `cell`, one cell's layer values (and `tables`); it
-cannot read the match. Core works them out for every cell when a scenario
+cannot read the match. Core works them out for every cell when a map
 loads and hands the host the answer, so the host itself evaluates nothing.
 Nothing can be in a cell that blocks movement: it is not `inBounds`, and
 `neighbors` and `cellsWithin` leave it out. A cell that blocks sight breaks a
 `lineOfSight` that crosses it.
+
+### What a map must be
+
+```yaml
+space:
+  size: { min: [8, 8], max: [40, 40] }      # [width, height], either end optional
+  checks:
+    - { that: "cell.terrain != 'rock' || cell.cover == 0", message: rock gives no cover of its own }
+  places: [gate]                             # every map has a place of this name
+  map: { standard: board, only: true }
+```
+
+These are the ruleset's criteria for its maps, and `loadMap` refuses a map
+that fails one. `size` bounds the width and height. `checks` are to a cell
+what a kind's checks are to an instance: bool expressions over `cell`, one
+cell's layer values. `places` lists the named places every map must have.
+
+`map` names the ruleset's standard map, a map document shipped with it. A
+scenario that names no map and writes none is played on it. With `only`,
+every scenario is: naming another map, or writing one inline, is refused.
+Checkers is played on its `board` this way.
+
+### What play may change
+
+```yaml
+space:
+  layers:
+    terrain: { type: terrain, default: open, mutable: true }
+    height: { type: int, default: 0 }       # fixed: the map's value stands
+```
+
+A layer is fixed unless it says `mutable`. A rule writes a mutable layer
+with the `at` effect, and a referee with `author`:
+
+```yaml
+effects:
+  - at: square
+    set: { terrain: "'difficult'" }
+```
+
+A write to a fixed layer, an undeclared one, or of the wrong type fails the
+build. When it runs, a write off the map, or one that leaves the cell
+failing a check, is an error; a write that changes nothing is not an event.
+
+The map document is never changed. A match holds what it has written, by
+cell, in its state (`state.ground`), and the ground at any moment is the map
+with that laid over it. `cellAt`, the two blocking rules, and every host
+function answer from the ground as it stands, so a wall a rule raises
+blocks movement and sight from the next expression on. Two matches on one
+map do not see each other's changes.
+
+## Maps
+
+A map is one playing environment for a ruleset. In the model it is a bounded
+plane, and a grid is one set of rules a ruleset may lay over it: the grid
+divides the plane into cells, and a cell is an address for a patch of it.
+The square grid is the only expression built so far, so a map today is a
+size in cells and a value for every cell. Cells, layers, and the picture
+below belong to the grid, not to the map as such.
+
+A map is a document of its own, so several scenarios can be played on one
+map, and a map can be drawn, changed, or swapped without touching who stands
+on it.
+
+```yaml
+format: 2
+map: { id: rocky-pass, title: Rocky pass }
+ruleset: { id: dnd-5e-2024-slice, version: 0.4.0 }
+legend:
+  '.': {}                        # every layer at its default
+  '#': { terrain: rock }
+  '"': { terrain: difficult }
+rows:
+  - '......#...'
+  - '..""..#...'
+  - '..""......'
+cells:
+  - { at: [9, 2], terrain: rock }   # one cell; overrides the picture
+```
+
+`rows` is the map as a picture: one string per row, one symbol per cell. The
+first row is `y = 0` and the first symbol of a row is `x = 0`, so the picture
+reads as the grid is addressed. `legend` says what each symbol holds: any of
+the ruleset's layers, the rest keeping their defaults. A symbol is one
+character. `cells` lists single cells, as `{ at: [x, y], <layer>: <value> }`,
+and wins over the picture. A map without a picture gives `width`, `height`,
+and `cells`.
+
+```yaml
+places:
+  gate: { at: [12, 0] }                 # a cell
+  camp: { at: [2, 3], size: [4, 3] }    # an area, from that corner
+```
+
+`places` names points and areas on the map. A scenario may stand an entity
+at one by name: a `cell` field given as `gate` is that place's cell. On a
+grid a place is given in whole cells. For a ruleset with no grid, a map is
+`width`, `height`, and `places` in game units, and has no cells.
+
+`loadMap(registry, doc)` checks a map against a compiled ruleset and returns
+it as the plain data a host is given ([`host.md`](host.md#the-map)). Refused:
+rows of different widths, a symbol not in the legend, a size that disagrees
+with the picture or with what the ruleset allows, a cell off the map or
+given twice, an undeclared layer, a value of the wrong type, a cell that
+fails a check, a place off the map, and a missing place the ruleset needs.
+
+What a cell's values mean is the ruleset's. The 5e slice gives each square a
+`terrain`; its `space` says rock blocks movement and sight, and its `move`
+intent charges what the table `squareCost` says the square costs to enter.
 
 ## Patterns
 
@@ -354,15 +480,11 @@ extends, and holds the same sections as a ruleset
 ```yaml
 format: 2
 scenario: { id: worg-vs-scout }
-ruleset: { id: dnd-5e-2024-slice, version: 0.3.0 }
+ruleset: { id: dnd-5e-2024-slice, version: 0.4.0 }
 seats:
   wild: { behavior: hunter }
   referee: { referee: true }
-space:
-  width: 24
-  height: 12
-  cells:
-    - { at: [11, 3], terrain: rock }      # one cell's layer values; the rest keep the defaults
+map: rocky-pass                           # a map document, by id
 entities:
   - { id: worg, kind: creature, fields: { ..., pos: [2, 6] } }
 links:
@@ -372,9 +494,12 @@ end:
     outcome: { result: "'win'", winner: "'monsters'" }
 ```
 
-`space.cells` holds the map's values: each entry names a cell with `at` and
-gives any of the ruleset's layers. A cell off the map, a cell given twice, an
-undeclared layer, and a value of the wrong type are all refused.
+`map` names the map the scenario is played on; the caller gives the map
+documents (`loadScenario(registry, doc, { maps })`, by id). A scenario may
+write a map inline instead, as `space: { width, height, cells, places }`,
+as in a map document, and is held to the same criteria. It gives one or the
+other. A scenario that gives neither is played on the ruleset's standard
+map, when it has one.
 
 End conditions belong to the scenario. They are checked after every write a
 rule makes; the first that holds ends the match with its outcome. A match
@@ -394,7 +519,7 @@ One entry per event, numbered by `seq`:
 
 | Entry | Records |
 |---|---|
-| `seed`, `global`, `create`, `set`, `destroy`, `link`, `unlink`, `roll`, `end` | A write. `fold` applies these. |
+| `seed`, `global`, `create`, `set`, `destroy`, `ground`, `link`, `unlink`, `roll`, `end` | A write. `fold` applies these. A `ground` entry is one layer of one cell: `at`, `layer`, `value`. |
 | `intent` | A seat's decision: `seat`, `intent`, `params`, and `of`, how many legal intents it chose among. |
 | `signal` | A signal emitted. |
 

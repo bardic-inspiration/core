@@ -97,6 +97,7 @@ export type Authored =
   | { create: { kind: string; id?: string; fields?: Record<string, unknown> } }
   | { set: { id: string; field: string; key?: string; value: unknown } }
   | { destroy: string }
+  | { ground: { at: [number, number] | { x: number; y: number }; layer: string; value: unknown } }
   | { link: { rel: string; from: string; to: string } }
   | { unlink: { rel: string; from: string; to: string } };
 
@@ -381,6 +382,15 @@ export class Match {
         if (reason) throw new RuleError(`${id}.${field}: ${reason}`);
         stage({ t: 'set', id, field, ...(key === undefined ? {} : { key }), value: value as Value });
         touched.add(id);
+      } else if ('ground' in change) {
+        const { at, layer, value } = change.ground;
+        const spec = registry.cellLayers.get(layer);
+        if (!spec) throw new RuleError(`the ruleset declares no cell layer "${layer}"`);
+        if (!spec.mutable) throw new RuleError(`the layer "${layer}" is not mutable, so nothing can write it`);
+        const reason = invalid(registry, world, scratch, spec.type, value);
+        if (reason) throw new RuleError(`${layer}: ${reason}`);
+        const event = this.groundWrite(scratch, Array.isArray(at) ? { x: at[0], y: at[1] } : at, layer, value as Value);
+        if (event) stage(event);
       } else if ('destroy' in change) {
         if (!scratch.entities[change.destroy]) throw new RuleError(`no entity "${change.destroy}"`);
         stage({ t: 'destroy', id: change.destroy });
@@ -606,6 +616,23 @@ export class Match {
     return dehydrate(this.evaluate(compiled)) as string;
   }
 
+  /**
+   * The write that gives a cell's layer a value, or null when it holds it
+   * already. Refused off the map, and when the cell would fail a check.
+   */
+  private groundWrite(state: State, at: { x: number; y: number }, layer: string, value: Value): Write | null {
+    const { ground, space } = this.scenario.world;
+    if (!ground) throw new RuleError('this match has no grid to write to');
+    if (!Number.isInteger(at.x) || !Number.isInteger(at.y) || at.x < 0 || at.y < 0 || at.x >= space.width || at.y >= space.height) {
+      throw new RuleError(`(${at.x}, ${at.y}) is off the map`);
+    }
+    const held = ground(state.ground ?? {}).host.cellAt(at);
+    if (JSON.stringify(held[layer]) === JSON.stringify(value)) return null;
+    const failed = this.registry.cellFails({ ...held, [layer]: value });
+    if (failed.length > 0) throw new RuleError(`(${at.x}, ${at.y}): ${failed.join('; ')}`);
+    return { t: 'ground', at: { x: at.x, y: at.y }, layer, value };
+  }
+
   private checked(type: ValueType, value: Value, where: string): Value {
     const reason = invalid(this.registry, this.scenario.world, this.state, type, value);
     if (reason) throw new RuleError(`${where}: ${reason}`);
@@ -663,6 +690,16 @@ export class Match {
           }
         }
         break;
+      case 'ground': {
+        const at = dehydrate(this.evaluate(fx.at)) as { x: number; y: number };
+        for (const { layer, type, value } of fx.writes) {
+          if (this.state.ended) break;
+          const event = this.groundWrite(this.state, at, layer, this.checked(type, dehydrate(this.evaluate(value)), value.path));
+          // A write that changes nothing is not an event.
+          if (event) this.write(event);
+        }
+        break;
+      }
       case 'create': {
         const given = Object.fromEntries(fx.fields.map(({ name, value }) => [name, dehydrate(this.evaluate(value))]));
         const id = `${fx.kind}#${this.state.nextId}`;

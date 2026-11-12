@@ -1,0 +1,14 @@
+# A table for four, 12 by 8. It has no grid and no cells: only places. The
+# chairs are numbered as `player.chair` is, clockwise from the top.
+format: 2
+map: { id: table, title: Table for four }
+ruleset: { id: holdem, version: 0.2.1 }
+width: 12
+height: 8
+places:
+  board: { at: [3.5, 3], size: [5, 1.5] }
+  pot: { at: [6, 5.25] }
+  chair0: { at: [6, 0.5] }
+  chair1: { at: [11.5, 4] }
+  chair2: { at: [6, 7.5] }
+  chair3: { at: [0.5, 4] }

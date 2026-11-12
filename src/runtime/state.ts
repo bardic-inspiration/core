@@ -25,6 +25,12 @@ export interface State {
   nextId: number;
   /** Each seat's own random stream, by seat, once that seat has drawn from it. */
   streams: Record<string, number>;
+  /**
+   * What play has changed on the map: for each place written, by `"x,y"`,
+   * the layer values it now holds. The map itself is never changed; the
+   * ground at any moment is the map with this laid over it.
+   */
+  ground: Record<string, Record<string, Value>>;
   /** Set once, when a scenario end condition holds or the flow runs out. */
   ended: Record<string, Value> | null;
 }
@@ -35,6 +41,7 @@ export type Write =
   | { t: 'create'; id: string; kind: string; fields: Record<string, Value> }
   | { t: 'set'; id: string; field: string; key?: string; value: Value }
   | { t: 'destroy'; id: string }
+  | { t: 'ground'; at: { x: number; y: number }; layer: string; value: Value }
   | { t: 'link'; rel: string; from: string; to: string }
   | { t: 'unlink'; rel: string; from: string; to: string }
   | { t: 'roll'; n: number; d: number; values: number[]; rng: number }
@@ -57,7 +64,7 @@ export type Marker =
  */
 export type GameEvent = (Write | Marker) & { seq: number; cause?: number; by?: string };
 
-export const emptyState = (): State => ({ entities: {}, links: {}, game: {}, rng: 0, nextId: 1, streams: {}, ended: null });
+export const emptyState = (): State => ({ entities: {}, links: {}, game: {}, rng: 0, nextId: 1, streams: {}, ground: {}, ended: null });
 
 /** Applies one event. */
 export function apply(state: State, event: Write | Marker): State {
@@ -86,6 +93,9 @@ export function apply(state: State, event: Write | Marker): State {
         for (const rel of Object.keys(draft.links)) {
           draft.links[rel] = draft.links[rel].filter(([from, to]) => from !== event.id && to !== event.id);
         }
+        break;
+      case 'ground':
+        ((draft.ground ??= {})[`${event.at.x},${event.at.y}`] ??= {})[event.layer] = event.value;
         break;
       case 'link':
         (draft.links[event.rel] ??= []).push([event.from, event.to]);

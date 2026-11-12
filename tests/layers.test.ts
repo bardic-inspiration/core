@@ -7,7 +7,7 @@ import { loadRuleset, loadScenarioFile, readYaml } from '../src/load.ts';
 import { behaviorsFor, compileWith, fixture, play, read, refusal, tiny } from './helpers.ts';
 
 const base = () => readYaml('rulesets/dnd-5e-2024-slice/ruleset.yaml');
-const extension = (body: Record<string, unknown>, wants = '0.3.0') => ({
+const extension = (body: Record<string, unknown>, wants = '0.4.0') => ({
   format: 2, extension: { id: 'test', version: '0.1.0' }, extends: { id: 'dnd-5e-2024-slice', version: wants }, ...body,
 });
 
@@ -56,7 +56,7 @@ describe('extensions', () => {
   });
 
   it('refuses an extension written for another ruleset or an incompatible version', () => {
-    expect(refusal(() => compileWith(base(), [extension({}, '0.4.0')]))).toMatch(/extends dnd-5e-2024-slice@0\.4\.0/);
+    expect(refusal(() => compileWith(base(), [extension({}, '0.5.0')]))).toMatch(/extends dnd-5e-2024-slice@0\.5\.0/);
     expect(refusal(() => compileWith(tiny(), [extension({})]))).toMatch(/but the base is tiny@1\.0\.0/);
   });
 

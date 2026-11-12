@@ -7,7 +7,7 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
 import { build } from 'esbuild';
-import { readYaml } from '../../src/load.ts';
+import { readMaps, readYaml } from '../../src/load.ts';
 import type { Job, JobResult } from './job.ts';
 
 /** The page's side of a Web Worker, as far as this file uses it. Core is typed without the DOM. */
@@ -37,6 +37,7 @@ export const shippedJob = (ruleset: string, scenario: string, seeds: number[]): 
   ruleset: readYaml(`rulesets/${ruleset}/ruleset.yaml`),
   behaviors: [readYaml(`rulesets/${ruleset}/behaviors/default.yaml`)],
   scenario: readYaml(`rulesets/${ruleset}/scenarios/${scenario}.yaml`),
+  maps: readMaps(ruleset),
   seeds,
 });
 

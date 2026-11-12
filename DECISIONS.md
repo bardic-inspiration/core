@@ -452,3 +452,166 @@ is 2 and a format 1 file is refused by name, not by an unknown key. The
 recorded matches were regenerated because the log gained `cause`, `of`,
 `rng`, and the seed. Before regenerating, all 240 were played and compared
 with those fields left out: the logs and records were identical.
+
+## 2026-11-12: maps
+
+A first pass at the playing environment as a thing of its own, starting with
+the 5e slice's square grid.
+
+**D58. A map is a document, and `space` is its kind.** The ruleset's `space`
+already said what a map is made of: the grid, the layers each cell holds,
+and what blocks. What was missing was the map itself, which lived inside
+each scenario. It is now a document of its own (`map:`, under
+`rulesets/<id>/maps/`), checked against the ruleset by `loadMap` and named
+by a scenario with `map: <id>`. Why a document and not an entity kind: a
+map is not in the state or the log (D52), nothing in a rule writes it yet,
+and the studio needs to draw and paint one before any match exists.
+`space` kept its name; renaming it to `map` would have broken every ruleset
+for no change in what it says. The format stays 2, since nothing written
+before is refused.
+
+**D59. A map is drawn as a picture.** `rows` is one string per row and
+`legend` says what each symbol holds; `cells` lists single cells and wins
+over the picture. Why: a square grid is read and reviewed far more easily
+as a picture than as a list of coordinates, and a diff of one shows what
+moved. The first row is `y = 0`, so the picture is addressed as the grid is.
+The legend belongs to the map and not to the ruleset, so a ruleset stays
+free of presentation.
+
+**D60. A scenario names a map or writes one inline, not both.** The inline
+`space` stays: a test, or a board with nothing on it, should not need a
+second file. `loadScenario` is given the map documents by id, as plain
+data, so core still reads no files.
+
+**D61. Corners are the host's, declared by the ruleset.** `space.corners:
+closed` says a diagonal step may not pass the corner of a cell that blocks
+movement, as 5e rules for a feature that fills its square. It is in the
+host contract because `neighbors` is the host's answer, and a host that cut
+corners would play different matches. Only `neighbors` changes. `distance`
+and `cellsWithin` are not path lengths (D22) and still count by the
+shortest route, which is also how 5e counts range on a grid. The default is
+`open`, so the other rulesets play as before.
+
+**D62. Terrain is an enum with tables, not a kind of entity.** The 5e
+slice's `terrain` is `open`, `difficult`, or `rock`, and a table,
+`squareCost`, gives the feet of movement each costs to enter. `move` reads
+it through `cellAt`. Why not a `terrain` kind with instances: a cell layer
+holds a plain value (D52), and a table keyed by the enum says the same with
+what the format already has. An extension may add tables but not terrains;
+opening `enums.terrain` waits until an extension needs it.
+
+**D63. The 5e slice is 0.4.0, and the pack ambush is played on a map.** Its
+five boulders moved to `maps/rocky-pass.yaml` with patches of Difficult
+Terrain added, so the 40 recorded pack-ambush matches changed and were
+regenerated. The other 5e records changed only in `version`: their logs are
+the same.
+
+### Where maps go next
+
+Agreed after the first pass, and since built: D70 to D76 say how.
+
+**D64. A map is a bounded plane, and a grid is one expression of rules over
+it. (reframes D58)** The plane has an extent and a unit of measure, and
+needs nothing else. A grid is a ruleset's rule: it divides the plane into
+cells, snaps positions to them, and defines adjacency and step distance.
+Everything cell-shaped (layers, the picture and its legend, the blocking
+rules, corners) belongs to the grid. "No grid" must stop meaning "no
+space": a ruleset can have a map without one, as a poker table is.
+
+**D65. A ruleset says what its maps can be.** Two sets of criteria, both
+checked by `loadMap`: on the plane (bounds on the extent, places a map must
+have) and on the grid (checks over one cell's values). Criteria over the
+whole map that need a path, such as "every area can be reached", are left
+out until something needs them.
+
+**D66. A scenario imports a map, writes one inline, or takes the ruleset's
+standard map. (extends D60)** Importing is the option that keeps a map
+apart from the scenarios played on it; inline stays for the cases where
+that does not matter. A ruleset may ship a standard map, used by a scenario
+that says nothing, and may declare it the only one allowed. Checkers would
+do that in place of the fixed `width` and `height` in its `space`, and
+hold 'em would get a table.
+
+**D67. Whether play can change the map is declared by layer, not by one
+mode.** A layer is fixed unless the ruleset says `mutable`, and a rule that
+writes a fixed layer is refused at compile time. Why by layer: "to what
+extent" is then the same declaration as "whether", and a ruleset with no
+mutable layer is the classic fixed map with objects on it, at no cost. A
+mutable layer also closes a gap: the blocking rules read one cell's values
+and never the match (D52), so a door that is an entity cannot block sight,
+and a door that is a layer value can.
+
+**D68. A map document is never state. A match holds an overlay.** A write
+to a mutable layer is a log event, and state holds only the places the
+match has changed; the ground at any moment is the map with the overlay
+laid on it. Why: two scenarios on one map must not reach each other, and
+`fold`, replay, and forks must keep working from the log alone. The
+overlay is addressed by place, not by cell, so a ruleset without a grid
+needs no second mechanism. The host stays a pure function of a map: core
+works out the blocking for changed cells and hands the host the patched
+map, and never pushes changes into a host that keeps state.
+
+**D69. Named places are content every map can have.** A point or an area
+with a name, on the plane, with or without a grid. A scenario can then say
+where something stands by name, and a map with no grid has something to
+hold. Not in this pass: play on a plane without a grid (free positions,
+straight-line distance, shapes that block), which is a second set of
+questions for the host; cells hidden from some seats; and a map that
+changes size during play.
+
+### Building the map plan
+
+**D70. Criteria live in `space`: `size`, `checks`, `places`. (builds D65)**
+`size` is a smallest and a largest `[width, height]`. `checks` are bool
+expressions over `cell`, compiled where the blocking rules are, so they see
+one cell's values and the tables and nothing of a match. The default cell
+is checked when the ruleset compiles, a map's cells when it loads, and a
+written cell when it is written. `places` lists names every map must have.
+
+**D71. `space.map` names the standard map. (builds D66)** `{ standard: id,
+only }`. The ruleset names a map document and does not contain it, so the
+map stays a document like any other and core still reads no files; the
+check that the document exists is `npm run validate`'s. Checkers dropped
+its fixed `width` and `height` for a size of exactly 8 by 8 and its board
+as the only map. Hold 'em's table is standard but not the only one, since
+the table in the file is laid for four.
+
+**D72. A space with `grid: none` is a plane. (builds D64)** It may declare
+a unit, a size, places, and a standard map, and nothing about cells. Its
+maps are a size and places in game units. No host is built for one and the
+spatial functions refuse, so nothing about play changed for hold 'em; the
+table exists for whoever draws it. A ruleset with no `space` section still
+has no map at all.
+
+**D73. A place is a point or a rectangle, and scenarios use it by name.
+(builds D69)** `{ at, size }`. A scenario's `cell` field may be a place's
+name, resolved when the scenario loads, so the log and the state hold
+cells as before. Expressions cannot read places yet: a rule that needs one
+would want its name checked at compile time, which only the ruleset's
+required `places` could give, and nothing shipped asks for it.
+
+**D74. The `at` effect writes the ground. (builds D67)** `at: <cell>` with
+`set: { layer: expr }`. Why a new effect and not an address in `set`: a
+`set` key is an address of state, and a cell is not one. The compiler
+refuses a layer that is not `mutable`. A referee's `author` takes the same
+change and is held to the same rule: mutable is what the ruleset allows,
+not who is asking.
+
+**D75. The overlay is `state.ground`, and the host is rebuilt per ground.
+(builds D68)** One `ground` log entry per layer written; state holds only
+the written layers, by `"x,y"`. `Scenario.mapAt(state)` and the host come
+from the map patched with the overlay, kept by the overlay's identity, so
+`fold`, replay, forks, and snapshots needed no change of their own. The
+cost is one host built per write to the ground; a ruleset that never
+writes builds one host, as before. Blocking is worked out again only for
+written cells. The overlay is keyed by cell for now: "by place" in D68
+meant that the event and the state are not shaped around a grid, and a
+key is all that would change.
+
+**D76. The 5e proof is a spell form, `ground`.** `castGround` turns the
+open squares within a spell's radius into the terrain it `leaves`; Grease
+in the mage duel leaves Difficult Terrain under an enemy. Its saving
+throw and its duration are not written: the ground stays changed for the
+match. Rime casts it as an opening move, in 12 of the 40 recorded duels,
+which were regenerated. Checkers and hold 'em went to 0.2.1 and their logs
+are unchanged.

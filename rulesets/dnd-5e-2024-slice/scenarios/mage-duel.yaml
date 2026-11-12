@@ -10,7 +10,7 @@
 # from the published spells and not yet checked against ttrpg-library.
 format: 2
 scenario: { id: mage-duel, title: Mage duel }
-ruleset: { id: dnd-5e-2024-slice, version: 0.3.0 }
+ruleset: { id: dnd-5e-2024-slice, version: 0.4.0 }
 
 seats:
   ember: { behavior: artillery }
@@ -49,6 +49,10 @@ entities:
   - id: magic-missile
     kind: spell
     fields: { name: Magic Missile, level: 1, form: darts, range: 120, count: 3, countPerLevel: 1, dice: 1, die: 4, flat: 1, damageType: force }
+  # Grease, as far as the ground goes: a 15-foot square of Difficult Terrain. Its saving throw is not written.
+  - id: grease
+    kind: spell
+    fields: { name: Grease, level: 1, form: ground, range: 60, radius: 5, leaves: difficult }
   - id: shield
     kind: spell
     fields: { name: Shield, level: 1, form: ward, time: reaction }
@@ -85,6 +89,7 @@ links:
   - { rel: knows, from: ember, to: fireball }
   - { rel: knows, from: rime, to: ray-of-frost }
   - { rel: knows, from: rime, to: magic-missile }
+  - { rel: knows, from: rime, to: grease }
   - { rel: knows, from: rime, to: shield }
   - { rel: knows, from: rime, to: hold-person }
   - { rel: knows, from: rime, to: misty-step }

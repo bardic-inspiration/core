@@ -4,9 +4,14 @@
 # ace at 14) and suit is `c % 4`. There is no deck order to hide: a card is
 # drawn at random from what is left, when it is dealt.
 format: 2
-ruleset: { id: holdem, version: 0.2.0, title: Texas Hold 'Em (no-limit) }
+ruleset: { id: holdem, version: 0.2.1, title: Texas Hold 'Em (no-limit) }
 
-space: { grid: none }
+# The table is a plane with no grid: nothing in the rules reads a position.
+# A map of it has a place for the board and the pot, for whoever draws it.
+space:
+  grid: none
+  places: [board, pot]
+  map: { standard: table }
 
 enums:
   street: [preflop, flop, turn, river, showdown, done]
