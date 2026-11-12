@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import { Match, type Decision } from '../src/index.ts';
 import { loadRuleset, loadScenarioFile, readYaml } from '../src/load.ts';
-import { findSeed, loadScenario, play, read as readState } from './helpers.ts';
+import { behaviorsFor, findSeed, loadScenario, play, read as readState } from './helpers.ts';
 
 const registry = loadRuleset('dnd-5e-2024-slice');
 const shipped = loadScenarioFile(registry, 'dnd-5e-2024-slice', 'pack-ambush');
@@ -157,7 +157,7 @@ describe('advantage', () => {
 describe('behaviors', () => {
   const best = (match: Match, behavior: string) => {
     const decision = match.advance()!;
-    const scores = match.scores(behavior, decision.seat, decision.options);
+    const scores = match.scores(behaviorsFor(registry).byName.get(behavior)!, decision.seat, decision.options);
     return { option: decision.options[scores.indexOf(Math.max(...scores))], scores, decision };
   };
 

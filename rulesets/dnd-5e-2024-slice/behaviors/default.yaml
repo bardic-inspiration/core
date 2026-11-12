@@ -1,0 +1,226 @@
+# How the 5e slice's AI seats play: one-step utility scores over the legal
+# intents, with goals that scale them. The rules never read these.
+format: 2
+behaviorSet: { id: default }
+ruleset: { id: dnd-5e-2024-slice, version: 0.3.0 }
+
+behaviors:
+  hunter:
+    doc: Closes with the nearest enemy and bites.
+    scores:
+      attack: 100
+      opportunityAttack: 100
+      standUp: 150
+      move: >-
+        cel.bind(foes, all.creature.filter(c, c.side != actor.side && !c.defeated),
+          foes.map(c, distance(actor.pos, c.pos)).min() <= actor.reach
+            ? -1
+            : (foes.map(c, distance(actor.pos, c.pos)).min() - foes.map(c, distance(to, c.pos)).min()) * 2)
+      dash: >-
+        actor.movement == 0 && !all.creature.exists(c, c.side != actor.side && !c.defeated
+          && distance(actor.pos, c.pos) <= actor.reach) ? 30 : -1
+      disengage: -1
+      endTurn: 0
+      holdReaction: 0
+
+  skirmisher:
+    doc: Keeps its distance and shoots; fights hand to hand once bloodied.
+    scores:
+      attack: >-
+        !weapon.ranged ? 80
+          : actor.threatened ? 40
+          : distance(actor.pos, target.pos) > weapon.range ? 60
+          : 100
+      opportunityAttack: 90
+      standUp: 150
+      # Backs away from anything close. With no shot from here, steps to where there is one.
+      move: >-
+        cel.bind(foes, all.creature.filter(c, c.side != actor.side && !c.defeated),
+          cel.bind(near, foes.map(c, distance(actor.pos, c.pos)).min(),
+            cel.bind(next, foes.map(c, distance(to, c.pos)).min(),
+              near < 30 && next > near ? 120
+                : actor.wields.exists(w, foes.exists(c, distance(actor.pos, c.pos) <= w.maxRange && lineOfSight(actor.pos, c.pos))) ? -5
+                : actor.wields.exists(w, foes.exists(c, distance(to, c.pos) <= w.maxRange && lineOfSight(to, c.pos))) ? 60
+                : (near - next) * 2)))
+      dash: -1
+      disengage: -1
+      endTurn: 1
+      holdReaction: 0
+    goals:
+      - name: stand and fight
+        when: "actor.hp * 2 <= actor.hpMax"
+        scale: { move: 0 }
+
+  packHunter:
+    doc: >-
+      Hunts as a pack. Goes for whoever is down, marked, or already hurt, and
+      closes on the weakest prey within reach of a run. Breaks off when badly
+      hurt and outnumbered.
+    scores:
+      attack: "100 + (target.prone ? 30 : 0) + (target.exposures.size() > 0 ? 15 : 0) + 30 - floorDiv(30 * target.hp, target.hpMax)"
+      opportunityAttack: 100
+      standUp: 150
+      # Towards the prey: the enemy that is close and has few hit points left.
+      # With no way closer and nobody in reach, it circles to look for an opening.
+      move: >-
+        cel.bind(foes, all.creature.filter(c, c.side != actor.side && !c.defeated),
+          cel.bind(prey, sortBy(foes, foes.map(c, distance(actor.pos, c.pos) + c.hp)).first(),
+            cel.bind(closer, distance(actor.pos, prey.pos) - distance(to, prey.pos),
+              foes.exists(c, distance(actor.pos, c.pos) <= actor.reach) ? closer * 2 - 3
+                : closer == 0 ? 2
+                : closer * 2)))
+      dash: >-
+        actor.movement == 0 && !all.creature.exists(c, c.side != actor.side && !c.defeated
+          && distance(actor.pos, c.pos) <= actor.reach) ? 30 : -1
+      disengage: -1
+      endTurn: 1
+      holdReaction: 0
+    goals:
+      - name: break off
+        when: >-
+          actor.hp * 4 <= actor.hpMax
+            && all.creature.filter(c, c.side == actor.side && !c.defeated).size()
+              < all.creature.filter(c, c.side != actor.side && !c.defeated).size()
+        scale: { attack: 0, move: -1 }
+
+  sniper:
+    doc: >-
+      Shoots from a distance and favours a target it has an edge on. When an
+      enemy closes in, it slips away if it can and fights hand to hand if it
+      cannot.
+    scores:
+      attack: >-
+        (weapon.ranged ? (actor.threatened ? 40 : 100) : 70)
+          + (target.prone && distance(actor.pos, target.pos) <= 5 ? 20 : 0)
+          + (target.exposures.size() > 0 ? 20 : 0)
+          + 20 - floorDiv(20 * target.hp, target.hpMax)
+      opportunityAttack: 90
+      standUp: 150
+      nimbleEscape: "actor.threatened ? 160 : -1"
+      move: >-
+        cel.bind(foes, all.creature.filter(c, c.side != actor.side && !c.defeated),
+          cel.bind(near, foes.map(c, distance(actor.pos, c.pos)).min(),
+            cel.bind(next, foes.map(c, distance(to, c.pos)).min(),
+              actor.threatened && !actor.disengaged ? -5
+                : near < 20 && next > near ? 150
+                : actor.wields.exists(w, foes.exists(c, distance(actor.pos, c.pos) <= w.maxRange && lineOfSight(actor.pos, c.pos))) ? -5
+                : actor.wields.exists(w, foes.exists(c, distance(to, c.pos) <= w.maxRange && lineOfSight(to, c.pos))) ? 60
+                : (near - next) * 2)))
+      dash: -1
+      disengage: -1
+      endTurn: 1
+      holdReaction: 0
+
+  defender:
+    doc: Holds the line. Fights whoever is closest, and will not stray far from the weakest ally.
+    scores:
+      attack: "(weapon.ranged ? 60 : 100) + 20 - floorDiv(20 * target.hp, target.hpMax)"
+      opportunityAttack: 100
+      standUp: 150
+      move: >-
+        cel.bind(foes, all.creature.filter(c, c.side != actor.side && !c.defeated),
+          cel.bind(near, foes.map(c, distance(actor.pos, c.pos)).min(),
+            near <= actor.reach ? -1 : (near - foes.map(c, distance(to, c.pos)).min()) * 2))
+      dash: -1
+      disengage: -1
+      endTurn: 1
+      holdReaction: 0
+    goals:
+      - name: stay by the weakest ally
+        when: >-
+          cel.bind(allies, all.creature.filter(c, c.side == actor.side && !c.defeated && c.id != actor.id),
+            allies.size() > 0 && cel.bind(charge, sortBy(allies, allies.map(c, c.hpMax)).first(),
+              distance(to, charge.pos) > 15 && distance(to, charge.pos) > distance(actor.pos, charge.pos)))
+        scale: { move: 0 }
+
+  medic:
+    doc: Heals an ally who is bloodied, the worse off the sooner. Otherwise harries the enemy from behind the line.
+    scores:
+      cast: >-
+        spell.form == 'heal'
+          ? (target.hp * 2 <= target.hpMax ? 200 - floorDiv(50 * target.hp, target.hpMax) : -1)
+          : 80 - floorDiv(20 * target.hp, target.hpMax)
+      attack: 40
+      opportunityAttack: 60
+      standUp: 150
+      move: >-
+        cel.bind(foes, all.creature.filter(c, c.side != actor.side && !c.defeated),
+          cel.bind(near, foes.map(c, distance(actor.pos, c.pos)).min(),
+            cel.bind(next, foes.map(c, distance(to, c.pos)).min(),
+              near < 20 && next > near ? 60
+                : foes.exists(c, distance(actor.pos, c.pos) <= 60 && lineOfSight(actor.pos, c.pos)) ? -5
+                : foes.exists(c, distance(to, c.pos) <= 60 && lineOfSight(to, c.pos)) ? 40
+                : (near - next) * 2)))
+      dash: -1
+      disengage: -1
+      endTurn: 1
+      holdReaction: 0
+
+  # Both spellcasters value a spell the same way: by the damage it should do,
+  # in tenths of a hit point, less what the slot is worth. Resistance halves
+  # it, and darts are worth little against a caster who can still ward.
+  artillery:
+    doc: Fights from long range, out of reach of a counterspell, and picks the spell that should hurt most.
+    scores:
+      cast: &spellValue >-
+        cel.bind(extra, max(0, slot - spell.level),
+          cel.bind(each, (spell.dice + spell.dicePerLevel * extra) * (spell.die + 1) * 5 + spell.flat * 10,
+            cel.bind(shots, spell.count + spell.countPerLevel * extra,
+              cel.bind(weak, spell.damageType in target.resists ? 2 : 1,
+                spell.form == 'heal' ? (target.hp * 2 <= target.hpMax ? 600 : -10)
+                : spell.form == 'darts' ? 200 - slot * 10 + floorDiv(each * shots, weak * (target.wardReady ? 4 : 1))
+                : spell.form == 'attack' ? 200 - slot * 10 + floorDiv(each * shots * (target.incapacitated ? 9 : 6), 10 * weak)
+                : 200 - slot * 10 + floorDiv(each, weak)
+                  + (spell.applies != 'paralyzed' ? 0 : target.paralyzed || actor.concentrating ? -500 : 250)))))
+      castAt: &burstValue >-
+        cel.bind(each, (spell.dice + spell.dicePerLevel * max(0, slot - spell.level)) * (spell.die + 1) * 5,
+          200 - slot * 10 + all.creature.filter(c, !c.defeated && distance(at, c.pos) <= spell.radius)
+            .map(c, (c.side == actor.side ? -2 : 1) * floorDiv(each, spell.damageType in c.resists ? 2 : 1)).sum())
+      castStep: &escapeValue >-
+        actor.threatened && all.creature.filter(c, c.side != actor.side && !c.defeated)
+          .all(c, distance(to, c.pos) >= 30) ? 500 : -1
+      castWard: &wardValue "total == 0 || total < actor.armorClass + 5 ? 300 : -1"
+      counterspell: &counterValue "casting.level >= 2 ? 300 + casting.level * 50 : -1"
+      attack: &bladeValue "target.incapacitated ? 450 : 30"
+      opportunityAttack: 60
+      standUp: 600
+      # Gets more than 60 feet away before casting, and stays within 120.
+      move: >-
+        cel.bind(foes, all.creature.filter(c, c.side != actor.side && !c.defeated),
+          cel.bind(near, foes.map(c, distance(actor.pos, c.pos)).min(),
+            cel.bind(next, foes.map(c, distance(to, c.pos)).min(),
+              near <= 60 && next > near ? 700 : near > 120 && next < near ? 700 : -5)))
+      dash: -1
+      disengage: -1
+      endTurn: 1
+      holdReaction: 0
+
+  controller:
+    doc: Closes to 60 feet, where its spells reach and it can counter, pins the enemy down, and then burns it.
+    scores:
+      cast: *spellValue
+      castAt: *burstValue
+      # Steps in when the enemy is out of reach, and out when it is too close.
+      castStep: >-
+        cel.bind(foes, all.creature.filter(c, c.side != actor.side && !c.defeated),
+          actor.threatened ? (foes.all(c, distance(to, c.pos) >= 30) ? 500 : -1)
+            : foes.map(c, distance(actor.pos, c.pos)).min() > 90 && foes.map(c, distance(to, c.pos)).min() <= 60 ? 430 : -1)
+      castWard: *wardValue
+      counterspell: *counterValue
+      attack: *bladeValue
+      opportunityAttack: 60
+      standUp: 600
+      move: >-
+        cel.bind(foes, all.creature.filter(c, c.side != actor.side && !c.defeated),
+          cel.bind(near, foes.map(c, distance(actor.pos, c.pos)).min(),
+            near > 60 ? (near - foes.map(c, distance(to, c.pos)).min()) * 140
+              : foes.exists(c, c.incapacitated) && near > 5 ? (near - foes.map(c, distance(to, c.pos)).min()) * 140
+              : -5))
+      dash: -1
+      disengage: -1
+      endTurn: 1
+      holdReaction: 0
+    goals:
+      - name: pin them down first
+        when: "spell.applies == 'paralyzed' && !target.paralyzed && !actor.concentrating"
+        scale: { cast: 1.5 }

@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "validate": "tsc --noEmit && node --experimental-strip-types --no-warnings scripts/validate.ts && vitest run",
     "play": "node --experimental-strip-types --no-warnings scripts/play.ts",
-    "sim": "node --experimental-strip-types --no-warnings scripts/sim.ts"
+    "sim": "node --experimental-strip-types --no-warnings scripts/sim.ts",
+    "browser": "node --experimental-strip-types --no-warnings scripts/browser.ts"
   },
   "dependencies": {
     "@marcbachmann/cel-js": "^8.0.0",
@@ -20,6 +21,8 @@
   },
   "devDependencies": {
     "@types/node": "^22.9.0",
+    "esbuild": "^0.28.2",
+    "playwright": "^1.63.0",
     "typescript": "^5.6.3",
     "vitest": "^2.1.4"
   }

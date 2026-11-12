@@ -3,7 +3,7 @@
 # compiler substitutes ${param} and merges what it emits into that layer.
 # Nothing here is special to the runtime: each pattern expands to the same
 # kinds, signals, reactions, and procedures a ruleset could write by hand.
-format: 1
+format: 2
 kit: { id: core-kit, version: 0.1.0 }
 
 patterns:

@@ -12,7 +12,7 @@ const yard = loadScenarioFile(registry, 'junkyard', 'yard');
 
 /** A small empty yard with the bots, parts, and piles a test names. Nothing falls from the sky. */
 const bench = (entities: any[], links: any[] = [], game: Record<string, unknown> = {}) => loadScenario(registry, {
-  format: 1, scenario: { id: 'bench' }, ruleset: { id: 'junkyard', version: '0.1.0' },
+  format: 2, scenario: { id: 'bench' }, ruleset: { id: 'junkyard', version: '0.2.0' },
   seats: { rust: {}, chrome: {}, yardmaster: { referee: true } },
   space: { width: 6, height: 6 }, game: { dropEvery: 0, ...game }, entities, links,
 });
@@ -181,7 +181,7 @@ describe('the yardmaster', () => {
 
   it('can author a new kind of part once a layer declares it', () => {
     const extension = {
-      format: 1, extension: { id: 'drills', version: '0.1.0' }, extends: { id: 'junkyard', version: '0.1.0' },
+      format: 2, extension: { id: 'drills', version: '0.2.0' }, extends: { id: 'junkyard', version: '0.2.0' },
       enums: { partType: ['drill'] },
       intents: {
         dig: {
@@ -198,7 +198,7 @@ describe('the yardmaster', () => {
     };
     const extended = compileWith(readYaml('rulesets/junkyard/ruleset.yaml'), [extension]);
     const scenario = loadScenario(extended, {
-      format: 1, scenario: { id: 'dig' }, ruleset: { id: 'junkyard', version: '0.1.0' },
+      format: 2, scenario: { id: 'dig' }, ruleset: { id: 'junkyard', version: '0.2.0' },
       seats: { rust: {}, yardmaster: { referee: true } }, space: { width: 4, height: 4 }, game: { dropEvery: 0 },
       entities: [bot('a', 'rust', [1, 1])],
     });

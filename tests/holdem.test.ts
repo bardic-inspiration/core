@@ -2,7 +2,7 @@
 // a flow, side pots, and hole cards that only their owner sees.
 
 import { describe, expect, it } from 'vitest';
-import { compile, fold, Match } from '../src/index.ts';
+import { compileBehaviors, fold, Match } from '../src/index.ts';
 import { viewOf } from '../src/runtime/session.ts';
 import { loadRuleset, loadScenarioFile, readYaml } from '../src/load.ts';
 import { choose, loadScenario, play, read as readState } from './helpers.ts';
@@ -152,13 +152,15 @@ describe('hidden cards', () => {
   });
 
   it('will not score a behavior that reads another player\'s cards', () => {
-    const doc = readYaml('rulesets/holdem/ruleset.yaml') as any;
-    doc.behaviors.cheat = { scores: { call: 'all.player.map(p, p.strength).max()' } };
-    const rigged = compile({ base: doc });
-    const match = new Match(rigged, loadScenario(rigged, scenarioDoc()), 1);
+    const cheat = {
+      format: 2, behaviorSet: { id: 'cheat' }, ruleset: { id: 'holdem', version: '0.2.0' },
+      behaviors: { cheat: { scores: { call: 'all.player.map(p, p.strength).max()' } } },
+    };
+    const { byName } = compileBehaviors(registry, [readYaml('rulesets/holdem/behaviors/default.yaml'), cheat]);
+    const match = new Match(registry, loadScenario(registry, scenarioDoc()), 1);
     const decision = match.advance()!;
-    expect(() => match.scores('cheat', decision.seat, decision.options)).toThrow(/player\.hole of "p-(north|east|south)" is hidden from seat "west"/);
-    expect(() => match.scores('shark', decision.seat, decision.options)).not.toThrow();
+    expect(() => match.scores(byName.get('cheat')!, decision.seat, decision.options)).toThrow(/player\.hole of "p-(north|east|south)" is hidden from seat "west"/);
+    expect(() => match.scores(byName.get('shark')!, decision.seat, decision.options)).not.toThrow();
   });
 });
 

@@ -5,10 +5,11 @@
 // frame on the stack. The stack is plain data, so a match can be saved at any
 // decision and resumed.
 
-import { RuleError, type Compiled, type Fx, type IntentSpec, type Registry, type SetTarget } from '../compile/program.ts';
+import { RuleError, type BehaviorSpec, type Compiled, type Fx, type IntentSpec, type Registry, type SetTarget } from '../compile/program.ts';
+import type { HostCall } from '../lib/functions.ts';
 import type { ValueType } from '../types.ts';
 import { instantiate } from './instantiate.ts';
-import { hashSeed, rollDice } from './rng.ts';
+import { hashSeed, nextRandom, rollDice } from './rng.ts';
 import type { Scenario } from './scenario.ts';
 import { Session, dehydrate, invalid, viewOf } from './session.ts';
 import { apply, emptyState, type GameEvent, type Marker, type State, type Value, type Write } from './state.ts';
@@ -21,11 +22,15 @@ type Vars = Record<string, Var>;
 /** Where an effect sits: its block and index. */
 type At = [block: string, index: number];
 
+/**
+ * A block frame carries `cause`: the `seq` of the intent or signal its
+ * effects run under, which every entry they log records. The flow has none.
+ */
 type Frame =
-  | { f: 'block'; block: string; pc: number; vars: Vars; boundary: boolean; returns?: { local: string; returned: string }[] }
+  | { f: 'block'; block: string; pc: number; vars: Vars; boundary: boolean; cause?: number; returns?: { local: string; returned: string }[] }
   | { f: 'each'; at: At; items: Value[]; i: number }
   | { f: 'while'; at: At }
-  | { f: 'emit'; signal: string; args: Vars; i: number }
+  | { f: 'emit'; signal: string; args: Vars; i: number; seq: number }
   | { f: 'prompt'; at: At; seat: string; given: Vars; asked: boolean; finished: boolean };
 
 /** One legal intent a seat may choose: every param bound, every gate passed. */
@@ -37,6 +42,46 @@ export interface Option {
 export interface Decision {
   seat: string;
   options: Option[];
+}
+
+/** One gate of one candidate: whether it held, and what it asked the host. */
+export interface GateResult {
+  source: string;
+  /** `error` only after a gate that failed: a later gate may rely on an earlier one holding. */
+  result: 'pass' | 'fail' | 'error';
+  error?: string;
+  calls: HostCall[];
+}
+
+/** One way to bind an offered intent's params, legal or not. */
+export interface Candidate {
+  params: Record<string, Value>;
+  legal: boolean;
+  /** Its index among the decision's options, when legal. */
+  option?: number;
+  /** Every gate, in order. All are evaluated, also past the first that fails. */
+  gates: GateResult[];
+}
+
+/** One evaluation of a param's domain, under the params bound before it. */
+export interface DomainTrace {
+  param: string;
+  given: Record<string, Value>;
+  /** How many values the domain held. */
+  size: number;
+  calls: HostCall[];
+}
+
+export interface IntentExplanation {
+  intent: string;
+  domains: DomainTrace[];
+  candidates: Candidate[];
+}
+
+/** Why the pending decision offers what it does: see `Match.explain`. */
+export interface Explanation {
+  seat: string;
+  intents: IntentExplanation[];
 }
 
 export interface Snapshot {
@@ -65,6 +110,8 @@ export class Match {
   private session: Session | null = null;
   private readonly views = new Map<string, Session>();
   private pending: Decision | null = null;
+  /** Where the deciding seat's stream stands after its draws for the pending decision; null when it has not drawn. */
+  private drawn: number | null = null;
   private decisions = 0;
   readonly seed: string;
   readonly registry: Registry;
@@ -81,13 +128,17 @@ export class Match {
       this.decisions = snapshot.decisions;
       return;
     }
-    this.record({ t: 'seed', rng: hashSeed(this.seed) });
+    this.record({ t: 'seed', seed: this.seed, rng: hashSeed(this.seed) });
     for (const event of scenario.setup) this.record(event);
     this.stack.push({ f: 'block', block: 'flow', pc: 0, vars: {}, boundary: true });
     this.checkEnd();
   }
 
-  /** The match as plain data. Take it while a decision is pending, restore it with `Match.restore`. */
+  /**
+   * The match as plain data. Take it while a decision is pending, restore it
+   * with `Match.restore`. Each seat's random stream is part of the state, so
+   * a restored match plays on exactly as the original would have.
+   */
   snapshot(): Snapshot {
     return structuredClone({ seed: this.seed, state: this.state, stack: this.stack, log: this.log, decisions: this.decisions });
   }
@@ -155,12 +206,12 @@ export class Match {
           const item = top.items[top.i++];
           // An entity destroyed since the list was taken is skipped.
           if (fx.type.k === 'ref' && !this.state.entities[item as string]) break;
-          this.stack.push({ f: 'block', block: fx.do, pc: 0, vars: { [fx.as]: { t: fx.type, v: item } }, boundary: false });
+          this.push(fx.do, { [fx.as]: { t: fx.type, v: item } });
           break;
         }
         case 'while': {
           const fx = this.effect(top.at) as Extract<Fx, { op: 'while' }>;
-          if (this.evaluate(fx.when) === true) this.stack.push({ f: 'block', block: fx.do, pc: 0, vars: {}, boundary: false });
+          if (this.evaluate(fx.when) === true) this.push(fx.do);
           else this.stack.pop();
           break;
         }
@@ -172,7 +223,7 @@ export class Match {
           }
           const reaction = reactions[top.i++];
           if (reaction.when && this.sessionNow().eval(reaction.when, this.hydrated(top.args)) !== true) break;
-          this.stack.push({ f: 'block', block: reaction.do, pc: 0, vars: structuredClone(top.args), boundary: true });
+          this.stack.push({ f: 'block', block: reaction.do, pc: 0, vars: structuredClone(top.args), boundary: true, cause: top.seq });
           break;
         }
         case 'prompt': {
@@ -184,13 +235,14 @@ export class Match {
           const options = this.enumerate(top, fx);
           if (options.length === 0) {
             this.stack.pop();
-            if (!top.asked && fx.ifNone) this.stack.push({ f: 'block', block: fx.ifNone, pc: 0, vars: {}, boundary: false });
+            if (!top.asked && fx.ifNone) this.push(fx.ifNone);
             break;
           }
           if (this.decisions >= this.scenario.maxDecisions) {
             this.record({ t: 'end', outcome: { result: 'limit' } });
             break;
           }
+          this.drawn = null;
           this.pending = { seat: top.seat, options };
           return this.pending;
         }
@@ -200,36 +252,73 @@ export class Match {
     return null;
   }
 
-  /** Takes the pending decision: option `index` of the ones `advance` returned. */
-  submit(index: number): void {
+  /**
+   * Takes the pending decision: option `index` of the ones `advance` returned.
+   * `rng` is for a replay, which restores the seat's stream to where the log
+   * says the original decision left it.
+   */
+  submit(index: number, rng?: number): void {
     const decision = this.pending;
     const option = decision?.options[index];
     if (!decision || !option) throw new RuleError(`there is no option ${index} to choose`);
     const frame = this.stack[this.stack.length - 1] as Extract<Frame, { f: 'prompt' }>;
+    const position = rng ?? this.drawn;
     this.pending = null;
+    this.drawn = null;
     this.decisions += 1;
     frame.asked = true;
-    this.record({ t: 'intent', seat: decision.seat, intent: option.intent, params: option.params });
-    this.enter(this.registry.intents.get(option.intent)!, decision.seat, option.params);
+    // The decision is logged under whatever asked for it: an intent or a signal, or nothing when the flow did.
+    const seq = this.record({
+      t: 'intent', seat: decision.seat, intent: option.intent, params: option.params, of: decision.options.length,
+      ...(position === null ? {} : { rng: position }),
+    }, undefined, this.cause());
+    this.enter(this.registry.intents.get(option.intent)!, decision.seat, option.params, seq);
+  }
+
+  /**
+   * A draw from the deciding seat's own random stream: an integer in
+   * [0, count). The stream is keyed by the match seed and the seat, so how a
+   * seat decides never disturbs the game's dice, and its position is logged
+   * with the decision.
+   */
+  pick(count: number): number {
+    const decision = this.pending;
+    if (!decision) throw new RuleError('a seat draws only while it has a decision to make');
+    const step = nextRandom(this.drawn ?? this.state.streams[decision.seat] ?? hashSeed(`${this.seed}|seat|${decision.seat}`));
+    this.drawn = step.position;
+    return Math.floor(step.value * count);
+  }
+
+  /** What a seat driver is shown for the pending decision. */
+  request(): SeatRequest {
+    const decision = this.pending;
+    if (!decision) throw new RuleError('there is no pending decision');
+    return {
+      seat: decision.seat, options: decision.options, state: this.view(decision.seat),
+      scores: (behavior) => this.scores(behavior, decision.seat, decision.options),
+      pick: (count) => this.pick(count),
+    };
+  }
+
+  /** Runs to the next decision and has that seat's driver take it. Returns the decision, or null once the match has ended. */
+  step(seats: Record<string, Seat>): Decision | null {
+    const decision = this.advance();
+    if (!decision) return null;
+    const seat = seats[decision.seat];
+    if (!seat) throw new RuleError(`no driver for seat "${decision.seat}"`);
+    this.submit(seat.choose(this.request()));
+    return decision;
   }
 
   /** Plays to the end with a driver for every seat. */
   run(seats: Record<string, Seat>): { outcome: Record<string, Value>; state: State; log: GameEvent[] } {
-    for (let decision = this.advance(); decision; decision = this.advance()) {
-      const seat = seats[decision.seat];
-      if (!seat) throw new RuleError(`no driver for seat "${decision.seat}"`);
-      this.submit(seat.choose({
-        seat: decision.seat, options: decision.options, state: this.view(decision.seat),
-        scores: (behavior) => this.scores(behavior, decision.seat, decision.options),
-      }));
-    }
+    while (this.step(seats));
     return { outcome: this.state.ended!, state: this.state, log: this.log };
   }
 
   /** A behavior's utility for each option: its score expression, scaled by every goal that holds. */
-  scores(behaviorName: string, seat: string, options: Option[]): number[] {
-    const behavior = this.registry.behaviors.get(behaviorName);
-    if (!behavior) throw new RuleError(`the ruleset declares no behavior "${behaviorName}"`);
+  scores(behavior: BehaviorSpec, seat: string, options: Option[]): number[] {
+    if (behavior.registry !== this.registry) throw new RuleError(`behavior "${behavior.name}" was compiled against another ruleset`);
     const session = this.sessionFor(seat);
     return options.map((option) => {
       const score = behavior.scores.get(option.intent);
@@ -242,6 +331,21 @@ export class Match {
       }
       return value;
     });
+  }
+
+  /**
+   * Why the pending decision offers what it does: every candidate binding of
+   * every offered intent, legal or not, with each gate's result and every
+   * question put to the space host along the way. It changes nothing, and
+   * its legal candidates are the decision's options, in order.
+   */
+  explain(): Explanation {
+    const decision = this.pending;
+    if (!decision) throw new RuleError('there is no pending decision to explain');
+    const frame = this.stack[this.stack.length - 1] as Extract<Frame, { f: 'prompt' }>;
+    const intents: IntentExplanation[] = [];
+    this.enumerate(frame, this.effect(frame.at) as Extract<Fx, { op: 'prompt' }>, intents);
+    return { seat: decision.seat, intents };
   }
 
   // ── Referee authoring ───────────────────────────────────────────────────
@@ -299,6 +403,7 @@ export class Match {
       if (failed.length > 0) throw new RuleError(`${id}: ${failed.join('; ')}`);
     }
     this.pending = null;
+    this.drawn = null;
     for (const event of events) this.record(event, seat);
     this.checkEnd();
   }
@@ -318,8 +423,9 @@ export class Match {
       if (reason) throw new RuleError(`${intentName}.${param.name}: ${reason}`);
     }
     this.pending = null;
-    this.record({ t: 'intent', seat: actor, intent: intentName, params: params as Record<string, Value> }, seat);
-    this.enter(intent, actor, params as Record<string, Value>);
+    this.drawn = null;
+    const seq = this.record({ t: 'intent', seat: actor, intent: intentName, params: params as Record<string, Value> }, seat);
+    this.enter(intent, actor, params as Record<string, Value>, seq);
   }
 
   private requireReferee(seat: string): void {
@@ -329,27 +435,44 @@ export class Match {
 
   // ── The machine ─────────────────────────────────────────────────────────
 
-  private record(event: Write | Marker, by?: string): void {
-    const entry = { ...event, seq: this.log.length, ...(by ? { by } : {}) } as GameEvent;
+  /** Appends one entry to the log and applies it. Returns its `seq`. */
+  private record(event: Write | Marker, by?: string, cause?: number): number {
+    const entry = { ...event, seq: this.log.length, ...(cause === undefined ? {} : { cause }), ...(by ? { by } : {}) } as GameEvent;
     this.state = apply(this.state, entry);
     this.log.push(entry);
     this.session = null;
     this.views.clear();
+    return entry.seq;
   }
 
-  /** A rule's write: recorded, then the scenario's end conditions are checked. */
+  /** A rule's write: recorded under its cause, then the scenario's end conditions are checked. */
   private write(event: Write): void {
-    this.record(event);
-    this.checkEnd();
+    const cause = this.cause();
+    this.record(event, undefined, cause);
+    this.checkEnd(cause);
   }
 
-  private checkEnd(): void {
+  /** The `seq` of the intent or signal the effects on top of the stack run under. */
+  private cause(): number | undefined {
+    for (let i = this.stack.length - 1; i >= 0; i--) {
+      const frame = this.stack[i];
+      if (frame.f === 'block') return frame.cause;
+    }
+    return undefined;
+  }
+
+  /** Enters a nested block. It runs under the same cause as the effect that entered it. */
+  private push(block: string, vars: Vars = {}): void {
+    this.stack.push({ f: 'block', block, pc: 0, vars, boundary: false, cause: this.cause() });
+  }
+
+  private checkEnd(cause?: number): void {
     if (this.state.ended) return;
     const session = this.sessionNow();
     for (const condition of this.scenario.end) {
       if (session.eval(condition.when) !== true) continue;
       const outcome = Object.fromEntries(condition.outcome.map(({ name, value }) => [name, dehydrate(session.eval(value))]));
-      this.record({ t: 'end', outcome });
+      this.record({ t: 'end', outcome }, undefined, cause);
       return;
     }
   }
@@ -411,30 +534,64 @@ export class Match {
     return vars;
   }
 
-  private enter(intent: IntentSpec, seat: string, params: Record<string, Value>): void {
-    this.stack.push({ f: 'block', block: intent.effects, pc: 0, vars: this.intentVars(intent, seat, params), boundary: true });
+  private enter(intent: IntentSpec, seat: string, params: Record<string, Value>, cause: number): void {
+    this.stack.push({ f: 'block', block: intent.effects, pc: 0, vars: this.intentVars(intent, seat, params), boundary: true, cause });
   }
 
-  /** Every way to bind an offered intent's params so that all its gates pass. */
-  private enumerate(frame: Extract<Frame, { f: 'prompt' }>, fx: Extract<Fx, { op: 'prompt' }>): Option[] {
-    const session = this.sessionFor(frame.seat);
+  /**
+   * Every way to bind an offered intent's params so that all its gates pass.
+   * With `explain`, every binding is reported there, legal or not, in a
+   * session of its own with the host's answers traced.
+   */
+  private enumerate(frame: Extract<Frame, { f: 'prompt' }>, fx: Extract<Fx, { op: 'prompt' }>, explain?: IntentExplanation[]): Option[] {
+    const hidden = this.registry.secrets && !this.scenario.doc.seats[frame.seat]?.referee;
+    const session = explain
+      ? new Session(this.registry, this.state, this.scenario.world, hidden ? frame.seat : undefined)
+      : this.sessionFor(frame.seat);
+    const traced = <T>(run: () => T): { value: T; calls: HostCall[] } => {
+      const calls: HostCall[] = [];
+      const outer = this.registry.trace;
+      this.registry.trace = calls;
+      try {
+        return { value: run(), calls };
+      } finally {
+        this.registry.trace = outer;
+      }
+    };
     const options: Option[] = [];
     for (const name of fx.offer) {
       const intent = this.registry.intents.get(name)!;
+      const report: IntentExplanation | undefined = explain && { intent: name, domains: [], candidates: [] };
+      if (report) explain!.push(report);
       const context: Record<string, unknown> = { seat: frame.seat };
       for (const param of intent.params) {
         if (!param.in) context[param.name] = session.hydrate(frame.given[param.name].v, param.type);
       }
+      const bound = () => Object.fromEntries(intent.params.filter((param) => param.name in context).map((param) => [param.name, dehydrate(context[param.name])]));
       const open = intent.params.filter((param) => param.in);
       const fill = (index: number) => {
         if (index === open.length) {
-          if (intent.gates.every((gate) => session.eval(gate, context) === true)) {
-            options.push({ intent: name, params: Object.fromEntries(intent.params.map((param) => [param.name, dehydrate(context[param.name])])) });
+          if (!report) {
+            if (intent.gates.every((gate) => session.eval(gate, context) === true)) options.push({ intent: name, params: bound() });
+            return;
           }
+          const gates = intent.gates.map((gate): GateResult => {
+            try {
+              const { value, calls } = traced(() => session.eval(gate, context));
+              return { source: gate.source, result: value === true ? 'pass' : 'fail', calls };
+            } catch (error) {
+              return { source: gate.source, result: 'error', error: (error as Error).message, calls: [] };
+            }
+          });
+          const legal = gates.every((gate) => gate.result === 'pass');
+          if (legal) options.push({ intent: name, params: bound() });
+          report.candidates.push({ params: bound(), legal, ...(legal ? { option: options.length - 1 } : {}), gates });
           return;
         }
         const param = open[index];
-        for (const candidate of session.eval(param.in!, context) as unknown[]) {
+        const domain = traced(() => session.eval(param.in!, context) as unknown[]);
+        report?.domains.push({ param: param.name, given: bound(), size: domain.value.length, calls: domain.calls });
+        for (const candidate of domain.value) {
           context[param.name] = candidate;
           fill(index + 1);
         }
@@ -531,7 +688,7 @@ export class Match {
       }
       case 'if': {
         const next = this.evaluate(fx.when) === true ? fx.then : fx.else;
-        if (next) this.stack.push({ f: 'block', block: next, pc: 0, vars: {}, boundary: false });
+        if (next) this.push(next);
         break;
       }
       case 'each':
@@ -553,14 +710,17 @@ export class Match {
       }
       case 'emit': {
         const args = this.bound(fx.args);
-        this.record({ t: 'signal', name: fx.signal, args: Object.fromEntries(Object.entries(args).map(([name, { v }]) => [name, v])) });
-        this.stack.push({ f: 'emit', signal: fx.signal, args, i: 0 });
+        const seq = this.record(
+          { t: 'signal', name: fx.signal, args: Object.fromEntries(Object.entries(args).map(([name, { v }]) => [name, v])) },
+          undefined, this.cause(),
+        );
+        this.stack.push({ f: 'emit', signal: fx.signal, args, i: 0, seq });
         break;
       }
       case 'call': {
         const procedure = this.registry.procedures.get(fx.procedure)!;
         this.stack.push({
-          f: 'block', block: procedure.do, pc: 0, vars: this.bound(fx.args), boundary: true,
+          f: 'block', block: procedure.do, pc: 0, vars: this.bound(fx.args), boundary: true, cause: this.cause(),
           returns: fx.as.map(({ local, returned }) => ({ local, returned })),
         });
         break;
@@ -574,11 +734,15 @@ export interface SeatRequest {
   seat: string;
   options: Option[];
   state: State;
-  /** The utility a ruleset behavior gives each option. */
-  scores(behavior: string): number[];
+  /** The utility a behavior gives each option. */
+  scores(behavior: BehaviorSpec): number[];
+  /** A draw from the seat's own random stream: an integer in [0, count). */
+  pick(count: number): number;
 }
 
 /** Anything that can fill a seat: a player, a scripted AI, an agent. It takes the legal intents and returns one. */
 export interface Seat {
+  /** What drives the seat, for a match record: a behavior's name, `random`, a player. */
+  readonly name?: string;
   choose(request: SeatRequest): number;
 }

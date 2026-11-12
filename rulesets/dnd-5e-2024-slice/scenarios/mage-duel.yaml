@@ -8,9 +8,9 @@
 # numbers follow SRD 5.2 (Fire Bolt, Ray of Frost, Magic Missile, Shield,
 # Scorching Ray, Hold Person, Misty Step, Counterspell, Fireball), written
 # from the published spells and not yet checked against ttrpg-library.
-format: 1
+format: 2
 scenario: { id: mage-duel, title: Mage duel }
-ruleset: { id: dnd-5e-2024-slice, version: 0.2.0 }
+ruleset: { id: dnd-5e-2024-slice, version: 0.3.0 }
 
 seats:
   ember: { behavior: artillery }

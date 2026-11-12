@@ -1,7 +1,9 @@
 # The format
 
-How a ruleset, an extension, and a scenario are written. This is format
-version 1 (`format: 1`); each ruleset carries its own `version`.
+How a ruleset, an extension, a behavior set, and a scenario are written. This
+is format version 2 (`format: 2`); each ruleset carries its own `version`.
+Format 2 moved behaviors out of rulesets and replaced a scenario's list of
+blocked cells with cell layers.
 
 Every document is YAML, checked against a JSON Schema
 ([`src/schemas.ts`](../src/schemas.ts)) and then resolved. Unknown keys,
@@ -31,8 +33,11 @@ what it declares.
 | Signal, reaction | `signals`, `reactions` | A named moment, and effects that run when it is emitted. |
 | Procedure | `procedures` | A reusable effect list with params and returns. |
 | Flow | `flow` | The scheduler: the effect list the match runs from the start. |
-| Behavior | `behaviors` | Utility scores an AI seat uses to choose among legal intents. |
-| Space | `space` | What is spatially possible. |
+| Space | `space` | What is spatially possible, and what each cell holds. |
+
+Behaviors, the utility scores an AI seat chooses by, are not part of a
+ruleset. They are a document of their own, compiled against it
+([Behaviors](#behaviors)).
 
 ### Types
 
@@ -76,10 +81,11 @@ truncates toward zero, so a rule that rounds down says `floorDiv(a, b)`.
 | Math | `floorDiv` `ceilDiv` `abs` `sign` `min` `max` `clamp` `floor` `ceil` `round` |
 | Lists | `.sum()` `.min()` `.max()` `.first()` `.distinct()` `sortBy(list, keys)` `range(n)`, plus CEL's `.map` `.filter` `.exists` `.all` `.size()` and `cel.bind` |
 | Cells | `cell(x, y)` `.offset(dx, dy)` `.mid(other)` `==` |
-| Space (host) | `inBounds(cell)` `distance(a, b)` `neighbors(cell)` `cellsWithin(cell, range)` `lineOfSight(a, b)` |
+| Space (host) | `inBounds(cell)` `distance(a, b)` `neighbors(cell)` `cellsWithin(cell, range)` `lineOfSight(a, b)` `cellAt(cell)` |
 
 The host functions are answered by the engine. `distance` and `range` are in
-the ruleset's units (`space.unit` per cell).
+the ruleset's units (`space.unit` per cell). What each must answer, exactly,
+is in [`host.md`](host.md).
 
 ## Kinds
 
@@ -238,7 +244,12 @@ attack roll it would have to beat.
 
 ## Behaviors
 
+A behavior set is its own document, kept apart from the rules it plays:
+
 ```yaml
+format: 2
+behaviorSet: { id: default }
+ruleset: { id: dnd-5e-2024-slice, version: 0.3.0 }
 behaviors:
   skirmisher:
     scores:
@@ -248,11 +259,27 @@ behaviors:
       - { name: stand and fight, when: "actor.hp * 2 <= actor.hpMax", scale: { move: 0 } }
 ```
 
+`compileBehaviors(registry, sets)` checks it against a compiled ruleset: a
+score is an expression in the scope of the intent it weighs (its params, and
+`seat`), typed like any other. Because the ruleset never reads a behavior, a
+set can be changed, swapped, or varied without recompiling the rules.
+
 A utility seat takes the highest-scoring legal intent and breaks ties with its
 own seeded stream. An intent the behavior does not score counts as 0. A goal
 multiplies the scores it names while its condition holds; its condition sees
 the same params as the scores it scales, and a negative factor turns a score
 around (`move: -1` makes "towards the prey" into "away from it").
+
+Several sets given together merge in order. A later set adds behaviors, and
+adds to or replaces the scores and goals of earlier ones (a goal is replaced
+by its name). That is how a variant overlays the default without editing it,
+and how an extension's intents get scored: a set lists the `extensions` it
+needs ([example](../rulesets/dnd-5e-2024-slice/behaviors/second-wind.yaml)).
+
+A seat gets its behavior by name. The scenario names a default
+(`seats: { wild: { behavior: hunter } }`), and a run may bind any seat to
+another: `bindSeats(scenario, behaviors, { wild: 'packHunter' })`. A seat
+with neither plays at random.
 
 Two behaviors can share a score with a YAML anchor (`cast: &spellValue ...`
 and `cast: *spellValue`). YAML merge keys (`<<`) are not read.
@@ -260,12 +287,35 @@ and `cast: *spellValue`). YAML merge keys (`<<`) are not read.
 ## Space
 
 ```yaml
-space: { grid: square, adjacency: 8, unit: 5, increment: 5 }
+space:
+  grid: square
+  adjacency: 8
+  unit: 5
+  increment: 5
+  layers:
+    terrain: { type: terrain, default: open }   # an enum
+    cover: { type: int, default: 0 }
+  blocksMove: "cell.terrain == 'rock'"
+  blocksSight: "cell.terrain == 'rock' || cell.cover >= 3"
 ```
 
 Core declares the rules of space; positions are ordinary `cell` fields, and
 geometry is the host's. A ruleset may fix `width` and `height`; otherwise the
 scenario gives them.
+
+`layers` declares what every cell holds: a typed attribute (`int`, `number`,
+`bool`, `string`, or an enum) with the value of a cell the scenario says
+nothing about. A rule reads a cell with `cellAt(c)`: `cellAt(to).cover`. The
+layers are its members, so a misspelt layer or a wrongly typed comparison
+fails the build. `cellAt` of a cell off the map is an error.
+
+`blocksMove` and `blocksSight` are the two rules the host respects. Each is a
+bool expression over `cell`, one cell's layer values (and `tables`); it
+cannot read the match. Core works them out for every cell when a scenario
+loads and hands the host the answer, so the host itself evaluates nothing.
+Nothing can be in a cell that blocks movement: it is not `inBounds`, and
+`neighbors` and `cellsWithin` leave it out. A cell that blocks sight breaks a
+`lineOfSight` that crosses it.
 
 ## Patterns
 
@@ -302,13 +352,17 @@ extends, and holds the same sections as a ruleset
 ## Scenarios
 
 ```yaml
-format: 1
+format: 2
 scenario: { id: worg-vs-scout }
-ruleset: { id: dnd-5e-2024-slice, version: 0.1.0 }
+ruleset: { id: dnd-5e-2024-slice, version: 0.3.0 }
 seats:
   wild: { behavior: hunter }
   referee: { referee: true }
-space: { width: 24, height: 12 }
+space:
+  width: 24
+  height: 12
+  cells:
+    - { at: [11, 3], terrain: rock }      # one cell's layer values; the rest keep the defaults
 entities:
   - { id: worg, kind: creature, fields: { ..., pos: [2, 6] } }
 links:
@@ -317,6 +371,10 @@ end:
   - when: "!all.creature.exists(c, !c.defeated && c.side == 'adventurers')"
     outcome: { result: "'win'", winner: "'monsters'" }
 ```
+
+`space.cells` holds the map's values: each entry names a cell with `at` and
+gives any of the ruleset's layers. A cell off the map, a cell given twice, an
+undeclared layer, and a value of the wrong type are all refused.
 
 End conditions belong to the scenario. They are checked after every write a
 rule makes; the first that holds ends the match with its outcome. A match
@@ -336,9 +394,26 @@ One entry per event, numbered by `seq`:
 
 | Entry | Records |
 |---|---|
-| `seed`, `global`, `create`, `set`, `destroy`, `link`, `unlink`, `roll`, `end` | A write. `fold` applies these and nothing else. |
-| `intent` | A seat's decision. |
+| `seed`, `global`, `create`, `set`, `destroy`, `link`, `unlink`, `roll`, `end` | A write. `fold` applies these. |
+| `intent` | A seat's decision: `seat`, `intent`, `params`, and `of`, how many legal intents it chose among. |
 | `signal` | A signal emitted. |
 
-Scenario setup is in the log too, so a log alone rebuilds its match. An entry
-with `by` was authored by a referee seat.
+Scenario setup is in the log too, so a log alone rebuilds its match; the
+`seed` entry carries the seed as it was given. An entry with `by` was
+authored by a referee seat.
+
+**Causes.** An entry carries `cause`: the `seq` of the intent or signal it
+ran under. A write made by an intent's effects points at that `intent`; a
+write made by a reaction points at the `signal` it reacted to; a signal, or a
+decision asked for during resolution, points at whatever emitted or prompted
+it. So a log reads as a tree without running a rule: a Counterspell cast at a
+Shield cast at an attack nests as the rules nest. Three things have no cause
+and sit at the top: setup, the flow's own effects (a round counter, a
+`turn.start`, a seat's turn), and a referee's own changes. An `end` has the
+cause of the write that brought it about.
+
+**Seat streams.** Each AI seat has its own random stream. When a seat draws
+from it to choose, the `intent` entry carries `rng`, where the stream then
+stood, and `fold` keeps it in `state.streams`. A snapshot, or the state
+folded from a log up to any entry, therefore holds every seat's stream, and a
+match resumed or forked from there plays on as the original would have.

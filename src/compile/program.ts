@@ -3,6 +3,7 @@
 // types, type-checked expressions, effect blocks, and the address table.
 
 import type { RulesetDoc, SpaceDoc } from '../format.ts';
+import type { HostCall } from '../lib/functions.ts';
 import type { Session } from '../runtime/session.ts';
 import type { Value } from '../runtime/state.ts';
 import type { ValueType } from '../types.ts';
@@ -110,8 +111,17 @@ export interface ProcedureSpec {
 
 export interface BehaviorSpec {
   name: string;
+  /** The registry it was compiled against; it scores no other's matches. */
+  registry: Registry;
   scores: Map<string, Compiled>;
   goals: { name: string; scale: Map<string, { when: Compiled; factor: number }> }[];
+}
+
+/** A typed attribute of every cell, declared under `space.layers`. */
+export interface CellLayerSpec {
+  name: string;
+  type: ValueType;
+  default: Value;
 }
 
 export interface AddressInfo {
@@ -135,21 +145,35 @@ export interface Registry {
   signals: Map<string, SignalSpec>;
   procedures: Map<string, ProcedureSpec>;
   intents: Map<string, IntentSpec>;
-  behaviors: Map<string, BehaviorSpec>;
+  /** What each cell holds, and which cells the host must treat as blocking. */
+  cellLayers: Map<string, CellLayerSpec>;
+  blocksMove?: Compiled;
+  blocksSight?: Compiled;
   /** Every effect list by id; `flow` is the scheduler. */
   blocks: Map<string, Fx[]>;
   /** Every fact the ruleset allows to exist, by address. */
   addresses: Map<string, AddressInfo>;
   /** Table data, converted for expressions. */
   tables: Record<string, unknown>;
-  /** Compiles an expression over the global scope only (scenario end conditions), reporting into `issues`. */
-  compileGlobal(source: string | number | boolean, path: string, issues: { path: string; message: string }[]): Compiled;
+  /**
+   * Compiles one more expression against this registry, reporting into
+   * `issues`. It sees the global scope and `vars`. `expected` lists the CEL
+   * types it may have.
+   */
+  compileExpr(
+    source: string | number | boolean, vars: ReadonlyMap<string, ValueType>, path: string,
+    issues: { path: string; message: string }[], expected?: string[],
+  ): Compiled;
+  /** A cell's layer values as expressions see them (`cellAt(c)`, and `cell` in the space rules). */
+  cellData(values: Record<string, Value>): unknown;
   /** The variables every expression sees (`game`, `all`, `space`, `tables`, `seats`), bound to a session. */
   globalsFor(session: Session): Record<string, unknown>;
   /** True when any field or global declares `visible`, so seats need filtered views. */
   secrets: boolean;
   /** The session whose expression is being evaluated; host functions read it. */
   active: Session | null;
+  /** While set, every host call an expression makes is appended here (`Match.explain`). */
+  trace: HostCall[] | null;
 }
 
 /** A refusal: the ruleset or scenario is invalid, with every reason found. */

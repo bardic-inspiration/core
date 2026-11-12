@@ -1,0 +1,7 @@
+format: 2
+behaviorSet: { id: ticker }
+ruleset: { id: ticker, version: 0.1.0 }
+
+behaviors:
+  builder:
+    scores: { split: 3, salvage: 2, idle: 1 }

@@ -1,8 +1,8 @@
 // Plays a scenario headless with AI seats and prints the log.
 //   npm run play -- <ruleset> <scenario> [seed] [--quiet]
 
-import { Match, UtilitySeat, RandomSeat, CompileError, type GameEvent, type Seat } from '../src/index.ts';
-import { loadRuleset, loadScenarioFile } from '../src/load.ts';
+import { Match, bindSeats, CompileError, type GameEvent } from '../src/index.ts';
+import { loadBehaviors, loadRuleset, loadScenarioFile } from '../src/load.ts';
 
 const [ruleset = 'checkers', scenarioName = 'standard', seed = '1', ...flags] = process.argv.slice(2);
 const quiet = flags.includes('--quiet');
@@ -16,11 +16,7 @@ try {
   const registry = loadRuleset(ruleset);
   const scenario = loadScenarioFile(registry, ruleset, scenarioName);
   const match = new Match(registry, scenario, seed);
-  const seats: Record<string, Seat> = Object.fromEntries(
-    Object.entries(scenario.doc.seats).map(([id, spec]) => [
-      id, spec.behavior ? new UtilitySeat(spec.behavior, seed, id) : new RandomSeat(seed, id),
-    ]),
-  );
+  const seats = bindSeats(scenario, loadBehaviors(registry, ruleset));
   const started = Date.now();
   const { outcome, log } = match.run(seats);
   if (!quiet) for (const event of log) console.log(show(event));

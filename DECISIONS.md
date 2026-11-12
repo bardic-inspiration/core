@@ -323,3 +323,132 @@ compiles every ruleset alone and with each extension, loads and plays every
 scenario, compares three seeds of each against the recorded data, and runs
 the tests. A GitHub workflow runs it on pull requests. The spec-driven
 process from ttrpg-library is still to come.
+
+## 2026-11-12: groundwork for the spatial test studio
+
+The studio is a browser workbench that runs core unchanged: it watches a
+match, rewinds or forks it, and runs batches. Issue #3 lists what it needs
+from core in ten tasks over four phases. They were built together, because
+several touch the same places (the log, the seat interface) and one change
+to the recorded data was better than four.
+
+### Behaviors
+
+**D46. Behaviors are a document apart from the ruleset. (replaces the
+`behaviors` section of D1; D20 and D42 still describe what a behavior is)**
+A behavior set is its own file with its own header, compiled against a
+registry by `compileBehaviors`. A ruleset with a `behaviors` key is refused.
+Sets merge in the order given, and a later one may replace what an earlier
+one scored; the `open` list does not apply, since behaviors are not rules
+and varying them is the point. A set that scores an extension's intent names
+the extension, and is refused without it. A scenario still names each seat's
+behavior, as a default; `bindSeats` lets a run bind a seat to another. Why:
+the studio varies behaviors far more often than rules, and a variant should
+not recompile or re-version the rules. `Match.scores` takes the compiled
+behavior, not a name, since the registry no longer knows any.
+
+### The log
+
+**D47. Every entry records its cause.** `cause` is the `seq` of the intent
+or signal the entry ran under. Setup has none, as the issue asks. Neither
+do the flow's own effects or a referee's own changes: nothing in the log
+stands above them. The issue also names "the prompt" as a possible cause,
+but a prompt is not a log entry; a decision made at one records the intent
+or signal that asked for it, which is what nests a reaction under its
+trigger. An `end` takes the cause of the write that tripped it. Sections
+such as rounds and turns stay the host's to draw, from signals it picks:
+core has only `flow`.
+
+**D53. A seat's random stream is in the state. (replaces the last sentence
+of D16)** The match holds each seat's stream and a driver draws through the
+request it is given (`request.pick`), so drivers keep no state. When a seat
+draws to decide, its `intent` entry carries `rng`, where the stream then
+stood, and `fold` keeps it in `state.streams`. So the positions are in
+every snapshot, as the issue asks, and also in the state folded from a log
+at any point, which is what a fork starts from. The streams start and step
+as before, so every match plays as it did. An `intent` entry was a pure
+marker (D14); it now writes this one thing.
+
+**D56. A record is a function of the log.** The `seed` entry carries the
+seed as given, and an `intent` carries `of`, how many options the seat had.
+With those, `summarize` works a match record out from the log alone, and it
+moved from the scripts into core, since the studio's workers need it. A
+record's `seed` is now a string, as the log holds it.
+
+### Replay and forks
+
+**D54. Replay is a function, and it re-applies a referee's changes.
+(replaces `ReplaySeat` in D15)** `replay(registry, scenario, log)` drives a
+match from the log: where the log has a seat's decision it chooses it,
+where it has a referee's changes it authors them again, and where it has a
+ruling it adjudicates again. After each step the match's log must equal the
+log given, entry for entry. `ReplaySeat` is gone: a seat driver is only
+asked to choose, so it could not author, and a second way to replay that
+skipped edits would be a trap. A run of consecutive entries by one referee
+is authored as one batch; the original batches cannot be told apart in the
+log, and one batch is checked no more strictly than several.
+
+**D55. A fork is a replay that stops.** `fork(registry, scenario, log, seq)`
+replays up to the decision at `seq` and returns the match there, taking a
+snapshot of the same log to start from when one is given. It is exact
+because of D53 and D54: choosing the same option again reproduces the rest
+of the log. A fork is offered only at an `intent` entry, a seat's or a
+referee's, since that is where a match can go another way.
+
+### The host
+
+**D49. Explaining a decision re-runs enumeration with everything kept.**
+`match.explain()` walks the same code path as `advance`, so its legal
+candidates are the decision's options by construction. It evaluates every
+gate, where play stops at the first that fails, and notes each call an
+expression makes to the space host. It runs in a session of its own so that
+a cached derived value still shows the host calls behind it. Why a method
+and not a flag on `advance`: it costs several times a plain enumeration, and
+a batch never wants it.
+
+**D50. The host contract is written down, order included. (extends D22)**
+`docs/host.md` gives each function's arguments, units, result, and edge
+cases. Two things were true but unwritten. The order of `neighbors` and
+`cellsWithin` is part of the contract, because it decides the order of a
+seat's options and so the log. And `inBounds` means "on the map and open to
+movement", not only "on the map": a wall inside the map is out of bounds.
+That second meaning is a wart, kept because the shipped rules rely on it
+and renaming it would have changed how they read for no gain in play.
+`compareHosts` checks a host against the reference over a whole map.
+
+**D52. Cell layers are declared by the ruleset, valued by the scenario, and
+held by the host. (replaces `space.blocked`)** `space.layers` declares typed
+attributes with defaults; a scenario's `space.cells` gives values per cell;
+`cellAt(c)` is a sixth host function whose result is typed from the
+declarations, so a misspelt layer fails the build. `blocksMove` and
+`blocksSight` are expressions over one cell's layers. Core evaluates them
+for every cell at load and gives the host plain lists, so a host never runs
+CEL and what a batch measures cannot differ from what a view shows. They
+cannot read the match: a rule that depended on state would make the host's
+answers change under it. A scenario's `blocked` list is gone, since a
+second way to block a cell would be one the studio's layer panel could not
+show. The values are not in the log; they belong to the map, not the match.
+
+**D51. One way in for expressions that are not in the ruleset.**
+`registry.compileExpr` compiles an expression against the registry with
+given variables. Scenario end conditions, behaviors, and
+`compileExpression` all use it. `compileExpression` adds typed variables
+and evaluation on any state or through a seat's view (D30 applies: a secret
+is an error).
+
+**D48. The browser check is part of validate.** Core's entry never imported
+Node, but nothing held it to that. A test now bundles the worker for the
+browser, runs it in a realm with no Node globals, and plays matches in a Web
+Worker in headless Chromium, comparing log hashes with Node's. Playwright is
+a dev dependency and the workflow installs Chromium. Ajv compiles schemas
+with `new Function`, which a strict content security policy forbids; that is
+left for the studio to meet.
+
+### Versions
+
+**D57. Format 2, and every ruleset's version went up.** Moving behaviors
+out and replacing `blocked` are both breaking for a document, so `format`
+is 2 and a format 1 file is refused by name, not by an unknown key. The
+recorded matches were regenerated because the log gained `cause`, `of`,
+`rng`, and the seed. Before regenerating, all 240 were played and compared
+with those fields left out: the logs and records were identical.

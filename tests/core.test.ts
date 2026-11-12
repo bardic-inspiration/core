@@ -2,7 +2,7 @@
 // function library, the reference grid host, and the runtime's failure modes.
 
 import { describe, expect, it } from 'vitest';
-import { createGridHost, hashSeed, Match, rollDice, RuleError } from '../src/index.ts';
+import { compareHosts, createGridHost, hashSeed, Match, rollDice, RuleError, type SpaceMap } from '../src/index.ts';
 import { versionSatisfies } from '../src/compile/layers.ts';
 import { compileWith, loadScenario, read, tiny, tinyScenario } from './helpers.ts';
 
@@ -52,8 +52,13 @@ describe('function library', () => {
 });
 
 describe('reference grid host', () => {
-  const host = createGridHost({ grid: 'square', adjacency: 8, unit: 5 }, { width: 6, height: 4, blocked: [[2, 1]] });
-  const orthogonal = createGridHost({ grid: 'square', adjacency: 4 }, { width: 6, height: 4 });
+  const wall = { x: 2, y: 1 };
+  const map: SpaceMap = {
+    grid: 'square', adjacency: 8, unit: 5, width: 6, height: 4,
+    defaults: { terrain: 'open' }, cells: [{ ...wall, values: { terrain: 'wall' } }], blocksMove: [wall], blocksSight: [wall],
+  };
+  const host = createGridHost(map);
+  const orthogonal = createGridHost({ ...map, adjacency: 4, unit: 1, cells: [], blocksMove: [], blocksSight: [] });
 
   it('measures distance in the ruleset\'s units, by its adjacency', () => {
     expect(host.distance({ x: 0, y: 0 }, { x: 3, y: 2 })).toBe(15);
@@ -67,6 +72,29 @@ describe('reference grid host', () => {
     expect(host.neighbors({ x: 0, y: 0 })).toEqual([{ x: 1, y: 0 }, { x: 0, y: 1 }, { x: 1, y: 1 }]);
     expect(orthogonal.neighbors({ x: 0, y: 0 })).toEqual([{ x: 1, y: 0 }, { x: 0, y: 1 }]);
     expect(host.cellsWithin({ x: 1, y: 1 }, 5)).toHaveLength(8);
+  });
+
+  it('tells movement and sight apart', () => {
+    const glass = createGridHost({ ...map, blocksSight: [] });
+    expect(glass.inBounds(wall)).toBe(false);
+    expect(glass.lineOfSight({ x: 0, y: 1 }, { x: 4, y: 1 })).toBe(true);
+    const fog = createGridHost({ ...map, blocksMove: [] });
+    expect(fog.inBounds(wall)).toBe(true);
+    expect(fog.lineOfSight({ x: 0, y: 1 }, { x: 4, y: 1 })).toBe(false);
+    // The cells at either end never break the line.
+    expect(fog.lineOfSight({ x: 0, y: 1 }, wall)).toBe(true);
+  });
+
+  it('answers what each cell holds', () => {
+    expect(host.cellAt(wall)).toEqual({ terrain: 'wall' });
+    expect(host.cellAt({ x: 0, y: 0 })).toEqual({ terrain: 'open' });
+  });
+
+  it('can be the yardstick for another host', () => {
+    expect(compareHosts(createGridHost(map), host, map)).toEqual([]);
+    // A host that lists neighbours in another order is not the same host: the order reaches the log.
+    const reversed = { ...host, neighbors: (cell: { x: number; y: number }) => host.neighbors(cell).reverse() };
+    expect(compareHosts(reversed, host, map)[0]).toMatch(/^neighbors\(/);
   });
 
   it('breaks line of sight on a blocked cell', () => {

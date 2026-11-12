@@ -23,12 +23,14 @@ export interface State {
   rng: number;
   /** Counter for generated entity ids. */
   nextId: number;
+  /** Each seat's own random stream, by seat, once that seat has drawn from it. */
+  streams: Record<string, number>;
   /** Set once, when a scenario end condition holds or the flow runs out. */
   ended: Record<string, Value> | null;
 }
 
 export type Write =
-  | { t: 'seed'; rng: number }
+  | { t: 'seed'; seed: string; rng: number }
   | { t: 'global'; field: string; value: Value }
   | { t: 'create'; id: string; kind: string; fields: Record<string, Value> }
   | { t: 'set'; id: string; field: string; key?: string; value: Value }
@@ -38,17 +40,26 @@ export type Write =
   | { t: 'roll'; n: number; d: number; values: number[]; rng: number }
   | { t: 'end'; outcome: Record<string, Value> };
 
-/** Entries that record what happened without writing state. */
+/**
+ * Entries that record what happened. A signal writes nothing. An intent
+ * writes one thing: the deciding seat's stream position, when the seat drew
+ * from it to choose (`rng`). `of` is how many legal intents were on offer;
+ * an intent a referee adjudicated has neither.
+ */
 export type Marker =
-  | { t: 'intent'; seat: string; intent: string; params: Record<string, Value> }
+  | { t: 'intent'; seat: string; intent: string; params: Record<string, Value>; of?: number; rng?: number }
   | { t: 'signal'; name: string; args: Record<string, Value> };
 
-/** One log entry. `by` marks a write a referee seat authored rather than a rule. */
-export type GameEvent = (Write | Marker) & { seq: number; by?: string };
+/**
+ * One log entry. `cause` is the `seq` of the intent or signal it ran under;
+ * setup, the flow's own effects, and a referee's changes have none. `by`
+ * marks an entry a referee seat authored rather than a rule.
+ */
+export type GameEvent = (Write | Marker) & { seq: number; cause?: number; by?: string };
 
-export const emptyState = (): State => ({ entities: {}, links: {}, game: {}, rng: 0, nextId: 1, ended: null });
+export const emptyState = (): State => ({ entities: {}, links: {}, game: {}, rng: 0, nextId: 1, streams: {}, ended: null });
 
-/** Applies one event. Markers leave state untouched. */
+/** Applies one event. */
 export function apply(state: State, event: Write | Marker): State {
   // Immer's Draft type cannot follow the recursive Value type, so the recipe is typed by hand.
   const recipe = (draft: State): void => {
@@ -89,6 +100,8 @@ export function apply(state: State, event: Write | Marker): State {
         draft.ended = event.outcome;
         break;
       case 'intent':
+        if (event.rng !== undefined) draft.streams[event.seat] = event.rng;
+        break;
       case 'signal':
         break;
     }

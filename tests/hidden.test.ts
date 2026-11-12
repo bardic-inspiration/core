@@ -3,8 +3,8 @@
 // any game.
 
 import { describe, expect, it } from 'vitest';
-import { Match, RuleError } from '../src/index.ts';
-import { compileWith, loadScenario, refusal, tiny, tinyScenario } from './helpers.ts';
+import { compileBehaviors, Match, RuleError } from '../src/index.ts';
+import { compileWith, loadScenario, refusal, tiny, tinyBehaviors, tinyScenario } from './helpers.ts';
 
 /** The tiny ruleset with a secret on each token, a secret global, and a tally kept by seat. */
 const secretive = (change: (doc: any) => void = () => {}) => {
@@ -13,9 +13,6 @@ const secretive = (change: (doc: any) => void = () => {}) => {
   doc.globals.vault = { type: 'int', default: 99, visible: false };
   doc.globals.tally = { type: 'map<string,int>', default: {} };
   doc.intents.bump.effects.push({ set: { 'game.tally[seat]': "(seat in game.tally ? game.tally[seat] : 0) + 1" } });
-  doc.behaviors.honest = { scores: { bump: 'token.secret' } };
-  doc.behaviors.peeker = { scores: { bump: 'all.token.map(t, t.secret).sum()' } };
-  doc.behaviors.thief = { scores: { bump: 'game.vault' } };
   change(doc);
   return doc;
 };
@@ -49,10 +46,15 @@ describe('hidden information', () => {
     const match = start();
     const decision = match.advance()!;
     expect(decision.seat).toBe('a');
-    expect(match.scores('honest', 'a', decision.options)).toEqual([7]);
-    expect(() => match.scores('peeker', 'a', decision.options)).toThrow(RuleError);
-    expect(() => match.scores('peeker', 'a', decision.options)).toThrow(/token\.secret of "t2" is hidden from seat "a"/);
-    expect(() => match.scores('thief', 'a', decision.options)).toThrow(/game\.vault is hidden from seat "a"/);
+    const { byName } = compileBehaviors(match.registry, tinyBehaviors({
+      honest: { scores: { bump: 'token.secret' } },
+      peeker: { scores: { bump: 'all.token.map(t, t.secret).sum()' } },
+      thief: { scores: { bump: 'game.vault' } },
+    }));
+    expect(match.scores(byName.get('honest')!, 'a', decision.options)).toEqual([7]);
+    expect(() => match.scores(byName.get('peeker')!, 'a', decision.options)).toThrow(RuleError);
+    expect(() => match.scores(byName.get('peeker')!, 'a', decision.options)).toThrow(/token\.secret of "t2" is hidden from seat "a"/);
+    expect(() => match.scores(byName.get('thief')!, 'a', decision.options)).toThrow(/game\.vault is hidden from seat "a"/);
   });
 
   it('works out the legal intents through the seat\'s view too', () => {

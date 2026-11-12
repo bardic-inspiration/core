@@ -7,17 +7,15 @@
 # This is the open game: state grows and shrinks during play, the ruleset
 # declares no winner, and time is ticks, not turns. A scenario may still
 # declare an end, such as a census after so many ticks.
-format: 1
-ruleset: { id: junkyard, version: 0.1.0, title: Junkyard }
+format: 2
+ruleset: { id: junkyard, version: 0.2.0, title: Junkyard }
 
-# A layer may add kinds of part, things to do, and ways to behave.
+# A layer may add kinds of part and things to do.
 open:
   - enums.partType.+
   - tables.+
   - intents.+
   - menus.*.+
-  - behaviors.+
-  - behaviors.*.scores.+
 
 uses:
   - pattern: slots
@@ -38,13 +36,21 @@ uses:
     with: { kind: bot, name: charge, max: "2 + 2 * self.mounts.filter(p, p.type == 'cell').map(p, p.rating).sum()" }
 
 enums:
+  ground: [open, wreck]
   partType: [arm, leg, plate, cell, panel]
 
 tables:
   # What falls into the yard, in the order a die picks it.
   scrap: [arm, leg, leg, plate, cell, panel]
 
-space: { grid: square, adjacency: 8 }
+# A cell is open ground or a wreck. Nothing stands on a wreck or sees past it.
+space:
+  grid: square
+  adjacency: 8
+  layers:
+    ground: { type: ground, default: open }
+  blocksMove: "cell.ground == 'wreck'"
+  blocksSight: "cell.ground == 'wreck'"
 
 globals:
   tick: { type: int, default: 0 }
@@ -203,38 +209,3 @@ flow:
               seat: bot.seat
               with: { bot: bot }
               offer: [act]
-
-behaviors:
-  forager:
-    doc: Gathers parts and multiplies. Fights only what stands next to it when there is nothing better to do.
-    scores:
-      salvage: "20 + part.rating + (part.type == 'leg' && bot.mobility == 0 ? 10 : 0)"
-      # Splits when full, and never gives away its last leg.
-      assemble: >-
-        bot.free > 0 ? -1
-          : part.type == 'leg' && bot.mounts.filter(p, p.type == 'leg').size() == 1 ? -1
-          : 12 - part.rating
-      strike: 3
-      move: >-
-        all.pile.size() == 0 ? 0
-          : (all.pile.map(p, distance(bot.pos, p.pos)).min() - all.pile.map(p, distance(to, p.pos)).min()) * 5
-      idle: 1
-
-  raider:
-    doc: Arms itself, hunts the bots of other seats, and picks over what is left of them.
-    scores:
-      strike: "30 + (target.hull == 1 ? 10 : 0) - target.armor"
-      salvage: "20 + part.rating + (part.type == 'arm' && bot.power == 0 ? 10 : 0)"
-      assemble: >-
-        bot.free > 0 ? -1
-          : part.type == 'leg' && bot.mounts.filter(p, p.type == 'leg').size() == 1 ? -1
-          : part.type == 'arm' && bot.mounts.filter(p, p.type == 'arm').size() == 1 ? -1
-          : 12 - part.rating
-      # Armed, it closes on the nearest bot of another seat. Unarmed, it looks for scrap.
-      move: >-
-        cel.bind(prey, all.bot.filter(b, b.seat != bot.seat),
-          bot.power > 0 && prey.size() > 0
-            ? (prey.map(b, distance(bot.pos, b.pos)).min() - prey.map(b, distance(to, b.pos)).min()) * 5
-          : all.pile.size() == 0 ? 0
-          : (all.pile.map(p, distance(bot.pos, p.pos)).min() - all.pile.map(p, distance(to, p.pos)).min()) * 5)
-      idle: 1

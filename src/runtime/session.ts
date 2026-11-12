@@ -3,7 +3,7 @@
 // demand, and follows relations. State never changes under a session: every
 // write produces a new state and a new session.
 
-import { Cell, type SpaceHost } from '../lib/functions.ts';
+import { Cell, type HostCall, type SpaceHost } from '../lib/functions.ts';
 import { RuleError, type Compiled, type FieldSpec, type KindSpec, type Registry } from '../compile/program.ts';
 import type { ValueType } from '../types.ts';
 import { showType } from '../types.ts';
@@ -84,6 +84,7 @@ export function invalid(registry: Registry, world: World, state: State, type: Va
 
 export class Session {
   private readonly derived = new Map<string, unknown>();
+  private readonly derivedCalls = new Map<string, HostCall[]>();
   private readonly computing = new Set<string>();
   private readonly handles = new Map<string, Handle>();
   private readonly globals: Record<string, unknown>;
@@ -178,10 +179,17 @@ export class Session {
 
   readDerived(id: string, kind: KindSpec, name: string): unknown {
     const key = `${id}\u0000${name}`;
-    if (this.derived.has(key)) return this.derived.get(key);
+    const outer = this.registry.trace;
+    if (this.derived.has(key)) {
+      // A traced reader is shown the host calls the value was computed from, cached or not.
+      outer?.push(...(this.derivedCalls.get(key) ?? []));
+      return this.derived.get(key);
+    }
     if (this.computing.has(key)) throw new RuleError(`derived value ${kind.name}.${name} depends on itself`);
     if (!this.state.entities[id]) throw new RuleError(`${kind.name} "${id}" no longer exists`);
     this.computing.add(key);
+    const calls: HostCall[] = [];
+    if (outer) this.registry.trace = calls;
     try {
       const spec = kind.derived.get(name)!;
       const self = this.handle(id, kind.name);
@@ -189,9 +197,14 @@ export class Session {
         ? new Map(spec.each.keys.map((item) => [item, this.eval(spec.value, { self, [spec.each!.variable]: item })]))
         : this.eval(spec.value, { self });
       this.derived.set(key, value);
+      if (outer) this.derivedCalls.set(key, calls);
       return value;
     } finally {
       this.computing.delete(key);
+      if (outer) {
+        this.registry.trace = outer;
+        outer.push(...calls);
+      }
     }
   }
 

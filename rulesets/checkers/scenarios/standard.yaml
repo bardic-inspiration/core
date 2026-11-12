@@ -1,8 +1,8 @@
 # The standard starting position. The end conditions live here, not in the
 # ruleset: a player who cannot move loses, and forty quiet king moves draw.
-format: 1
+format: 2
 scenario: { id: standard, title: Standard game }
-ruleset: { id: checkers, version: 0.1.0 }
+ruleset: { id: checkers, version: 0.2.0 }
 
 seats:
   red: { behavior: simple }

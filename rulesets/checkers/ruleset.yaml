@@ -1,7 +1,7 @@
 # English draughts. A closed game written in the open-game format: nothing is
 # authored during play, and the scenario declares the end.
-format: 1
-ruleset: { id: checkers, version: 0.1.0, title: Checkers (English draughts) }
+format: 2
+ruleset: { id: checkers, version: 0.2.0, title: Checkers (English draughts) }
 
 seats: [red, black]
 
@@ -96,10 +96,3 @@ flow:
               repeat: true
               ifNone:
                 - set: { game.blocked: player }
-
-behaviors:
-  simple:
-    doc: Takes captures, likes crowning, otherwise moves at random.
-    scores:
-      jump: "10 + (to.y == piece.farRow ? 5 : 0)"
-      step: "1 + (!piece.king && to.y == piece.farRow ? 5 : 0)"

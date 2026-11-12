@@ -2,9 +2,9 @@
 # scrap keeps falling. Two forage and one raids. Nobody wins: after 60 ticks
 # the scenario takes a census. A yardmaster seat can author new scrap while
 # the match runs.
-format: 1
+format: 2
 scenario: { id: yard, title: The yard }
-ruleset: { id: junkyard, version: 0.1.0 }
+ruleset: { id: junkyard, version: 0.2.0 }
 
 seats:
   rust: { behavior: forager }
@@ -16,7 +16,15 @@ space:
   width: 16
   height: 12
   # Walls of crushed cars.
-  blocked: [[5, 3], [5, 4], [5, 5], [10, 6], [10, 7], [10, 8], [7, 9], [8, 2]]
+  cells:
+    - { at: [5, 3], ground: wreck }
+    - { at: [5, 4], ground: wreck }
+    - { at: [5, 5], ground: wreck }
+    - { at: [10, 6], ground: wreck }
+    - { at: [10, 7], ground: wreck }
+    - { at: [10, 8], ground: wreck }
+    - { at: [7, 9], ground: wreck }
+    - { at: [8, 2], ground: wreck }
 
 game: { dropEvery: 4, swarmLimit: 6 }
 

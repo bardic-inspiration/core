@@ -1,12 +1,14 @@
 # Handoff
 
-Where the core prototype stands after its second pass. The reasons behind
-each call are in [`DECISIONS.md`](DECISIONS.md) (cited as D-numbers); the
-format is in [`docs/format.md`](docs/format.md).
+Where the core prototype stands after its third pass, which laid the
+groundwork for the spatial test studio (issue #3). The reasons behind each
+call are in [`DECISIONS.md`](DECISIONS.md) (cited as D-numbers); the format
+is in [`docs/format.md`](docs/format.md), and what a host implements and
+calls is in [`docs/host.md`](docs/host.md).
 
 ## What works
 
-Everything below is exercised by `npm run validate` (313 tests, and every
+Everything below is exercised by `npm run validate` (388 tests, and every
 shipped scenario played).
 
 - **The format and compiler.** YAML rulesets are schema-checked, patterns are
@@ -30,12 +32,13 @@ shipped scenario played).
   legal intents and behavior scores are worked out through its own view, and
   reading a secret there is an error (D30).
 - **Determinism and replay.** Same seed, same log. `fold(log)` equals the
-  final state. Replaying logged decisions through the rules reproduces the
-  log. All three hold for all six scenarios.
+  final state. Replaying a log through the rules reproduces it entry for
+  entry, a referee's changes and rulings included (D54). All three hold for
+  all six scenarios.
 - **Choices during resolution.** A reaction prompts another seat in the
   middle of an intent, nested where the rules nest (a Counterspell cast at a
   Shield cast at an attack), and a match can be saved at a decision and
-  resumed.
+  resumed. The save holds every AI seat's random stream (D53).
 - **Layers.** Extensions add to the 5e slice and to the junkyard; changes to
   anything closed are refused.
 - **The kit.** Six patterns as data: `pool`, `budget`, `check`, `duration`,
@@ -44,7 +47,60 @@ shipped scenario played).
 - **A referee seat** that authors instances during play and rules that an
   intent happens out of turn.
 - **Recorded matches.** `npm run sim` writes one record per match to
-  [`data/matches.jsonl`](data/matches.jsonl) (D44).
+  [`data/matches.jsonl`](data/matches.jsonl) (D44). A record is now worked
+  out from the log alone (D56).
+
+### The studio groundwork
+
+All ten tasks of issue #3, in one pass. `docs/host.md` is the reference.
+
+- **Behaviors are their own layer** (D46). Each ruleset's behaviors moved to
+  `rulesets/<id>/behaviors/default.yaml`, compiled against the registry by
+  `compileBehaviors` and bound to seats by `bindSeats`: by the scenario's
+  names, or by the run over them. Sets overlay each other in order.
+- **Causes in the log** (D47). Every entry records the `seq` of the intent
+  or signal it ran under, so a log is a tree.
+- **A browser worker** (D48). Core's entry is free of Node. The check
+  bundles it, runs it in a realm with no Node globals, and plays matches in
+  a Web Worker in headless Chromium; the logs match Node's. Timings below.
+- **Explained enumeration** (D49). `match.explain()` returns every candidate
+  at a decision, each gate's result, and every host call made.
+- **The host contract** (D50). Six functions, with units, ordering, and edge
+  cases written down, and `compareHosts` to hold an engine's host to it.
+- **Free-standing expressions** (D51). `compileExpression` checks one
+  against a registry; it evaluates on any state, or through a seat's view.
+- **Cell layers** (D52). A ruleset declares typed per-cell attributes and
+  two rules, `blocksMove` and `blocksSight`; a scenario gives the values;
+  `cellAt(c)` reads them, typed at compile time. The 5e slice and the
+  junkyard use a layer where they had a list of blocked cells.
+- **Seat streams in the state** (D53), **referee changes on replay** (D54),
+  and **forks** (D55): `fork(registry, scenario, log, seq)` returns the
+  match at that decision, and choosing the same again plays out the same
+  match.
+
+The format is now version 2, and each ruleset's version went up, because
+behaviors left the ruleset and `space.blocked` left the scenario. The log
+gained fields, so every `logHash` changed and the records were regenerated.
+With the new fields left out, all 240 recorded matches play out exactly as
+they did before: same logs, same records.
+
+### Core in a Web Worker against Node
+
+Seeds 1 to 10 of each scenario, on one machine (Node 22.23, Chromium 153):
+`npm run browser`. The worker is a fresh one per scenario, so its compile
+time is a cold start; Node's is warm.
+
+| Scenario | Same logs | Compile, Node / worker (ms) | Per match, Node / worker (ms) |
+|---|---|---|---|
+| checkers/standard | yes | 5 / 28 | 44 / 34 |
+| 5e/mage-duel | yes | 20 / 40 | 112 / 79 |
+| 5e/pack-ambush | yes | 18 / 43 | 113 / 96 |
+| 5e/worg-vs-scout | yes | 15 / 38 | 15 / 13 |
+| holdem/four-handed | yes | 8 / 28 | 81 / 64 |
+| junkyard/yard | yes | 7 / 29 | 324 / 228 |
+
+A match is no slower in the worker than in Node. The bundle is about 560 kB
+unminified.
 
 ## What the four new cases showed
 
@@ -110,17 +166,23 @@ Things in it worth a look later:
 - **Derived cycles** are caught when evaluated, not when compiled (D13).
 - **Kind checks** are not enforced after every write (D12).
 - **Rollback.** There is no undo; the log supports it but nothing winds back.
-- **AI seat state in a save.** A snapshot holds the match, not the seats'
-  random-stream positions.
 - **Behavior** is one-step utility scoring (D20, D42).
-- **Replay of referee changes.** `fold` replays them. Replaying decisions
-  through the rules (`ReplaySeat`) does not re-apply authored changes.
+- **Space rules are static.** `blocksMove` and `blocksSight` read a cell's
+  layers and nothing else, and a rule cannot write a cell. A door that opens
+  is still an entity standing in a cell, not a change to the map (D52).
+- **Cell layers are not in the log.** They are the scenario's, held by the
+  host; a log rebuilds a match's state but not its map (D52).
+- **`inBounds` means two things**: on the map, and open to movement (D50).
+- **Seat streams are not hidden.** `state.streams` is in every seat's view.
+- **A strict content security policy** needs `unsafe-eval` for the schema
+  checker until its validators are precompiled (D48).
 - **The 5e slice** is still a slice (D28, D39). Its new stat blocks and
   spells have not been checked against ttrpg-library.
 - **Recursion.** Procedures may now recurse through a signal (a Counterspell
   is itself a spell being cast). It is bounded by reactions in practice and
   by nothing in the compiler.
-- **Not measured:** matches larger than these, and running in a browser.
+- **Not measured:** matches larger than these, and a pool of workers at
+  once.
 
 ## Where the build departed from the brief
 
@@ -156,5 +218,6 @@ Suggested order.
 8. **Analyse the data.** Vary one behavior or one stat at a time with
    `npm run sim -- --only` and compare outcomes; the records are built for
    that.
-9. **The engine**: implement `SpaceHost` with real geometry, drive `advance`
-   and `submit` from a UI, and render from the event log.
+9. **The studio** (the engine's first form): implement `SpaceHost` to
+   `docs/host.md`, run matches in workers, and render from the event log's
+   tree. Its design is in the `space` repository.

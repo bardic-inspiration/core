@@ -12,9 +12,9 @@ const standard = loadScenarioFile(registry, 'checkers', 'standard');
 /** A scenario with just these pieces: `[id, owner, x, y, king?]`. */
 const position = (pieces: [string, string, number, number, boolean?][]) =>
   loadScenario(registry, {
-    format: 1,
+    format: 2,
     scenario: { id: 'position' },
-    ruleset: { id: 'checkers', version: '0.1.0' },
+    ruleset: { id: 'checkers', version: '0.2.0' },
     seats: { red: {}, black: {} },
     entities: pieces.map(([id, owner, x, y, king = false]) => ({ id, kind: 'piece', fields: { owner, pos: [x, y], king } })),
     end: standard.doc.end,
