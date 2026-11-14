@@ -1,10 +1,11 @@
-// The check a pull request must pass, apart from the tests:
+// Part of `npm run check`, the gate (AGENTS.md "Commands"): the checks on data
+// that the typecheck and the tests leave out:
 //   1. every ruleset under rulesets/ compiles, alone and with each of its extensions,
 //      and every behavior set compiles against the ruleset it is written for;
 //   2. every map and every scenario loads against its ruleset;
 //   3. every scenario plays to an end the scenario or the flow declares, and folding its log gives its final state;
 //   4. data/matches.jsonl still matches how the rules play.
-//   npm run validate
+//   npm run check
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';

@@ -3,7 +3,7 @@
 // functions through which expressions reach spatial facts.
 //
 // CEL integers are BigInt, and `/` truncates toward zero. Rulesets that round
-// down, as 5e does, say so with `floorDiv` (DECISIONS.md D7).
+// down, as 5e does, say so with `floorDiv` (archive/DECISIONS.md D7).
 
 import type { Environment } from '@marcbachmann/cel-js';
 

@@ -1,0 +1,29 @@
+# Dependabot — keeps the GitHub Actions the workflows use, and the npm
+# dependencies, up to date.
+#
+# PR titles come out as "ci: bump …" and "build: bump …", which pass the PR
+# title check (docs/ci.md). Grouping keeps it to one PR a week per ecosystem.
+
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: ci
+    groups:
+      actions:
+        patterns: ["*"]
+
+  # A bump that changes how a match plays changes the recorded matches, and
+  # the gate fails until they are regenerated (data/README.md).
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: build
+    groups:
+      npm:
+        patterns: ["*"]

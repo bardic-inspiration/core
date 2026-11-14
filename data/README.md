@@ -21,7 +21,7 @@ A record is worked out from a match's log alone (`summarize` in
 one. It holds nothing that changes between runs of the same seed: no clock
 and no machine. So the file is also a regression check. If a rule, a
 behavior, or the runtime changes how a match plays, that match's `logHash`
-changes, and `npm run validate` fails until the file is regenerated and the
+changes, and `npm run check` fails until the file is regenerated and the
 difference is committed with the change that caused it.
 
 ## A record
