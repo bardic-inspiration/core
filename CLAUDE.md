@@ -46,3 +46,4 @@ Project skills live in [`.claude/skills/`](.claude/skills/).
 |---|---|
 | [`ask-me`](.claude/skills/ask-me/SKILL.md) | The goal or scope is still fuzzy — interview to form intent before any plan exists. |
 | [`grill-me`](.claude/skills/grill-me/SKILL.md) | A plan exists — stress-test it for failure modes before building it. |
+| [`readme`](.claude/skills/readme/SKILL.md) | Rewrite the README into a short, conventional open-source README. |
