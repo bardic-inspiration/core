@@ -173,7 +173,7 @@ Core's entry imports nothing from Node, and reading files is left to
 [`src/load.ts`](../src/load.ts), which is not part of it. A page parses the
 YAML itself and passes plain data to a worker;
 [`scripts/browser/worker.ts`](../scripts/browser/worker.ts) is a complete
-example. `npm run validate` bundles it for the browser and runs it in
+example. `npm run check` bundles it for the browser and runs it in
 headless Chromium, and `npm run browser` plays every scenario there and in
 Node and prints the timings.
 

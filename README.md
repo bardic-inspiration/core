@@ -1,11 +1,9 @@
 # core
 
 A ludematic core: a format that expresses a game's ruleset as pure data, and
-one generic runtime that plays any ruleset written in it. The brief is
-[`RPG Core Design Document.md`](RPG%20Core%20Design%20Document.md).
+one generic runtime that plays any ruleset written in it.
 
-This is the prototype. It proves the central idea with four rulesets that
-share no code, each a YAML file:
+Four rulesets prove the idea, sharing no code, each a YAML file:
 
 - [`rulesets/checkers`](rulesets/checkers/ruleset.yaml): English draughts, a
   closed game.
@@ -18,6 +16,30 @@ share no code, each a YAML file:
 - [`rulesets/junkyard`](rulesets/junkyard/ruleset.yaml): a sandbox of
   self-assembling bots, with no winner.
 
+## Status
+
+A working prototype. [`SPEC.md`](SPEC.md) is being written from it; the
+open [plan issues](https://github.com/bardic-inspiration/core/issues?q=is%3Aopen+label%3Aplan)
+and the [issue queue](https://github.com/bardic-inspiration/core/issues) say
+what's next. The prototype's brief, decision log, and handoff note are kept
+for background in [`archive/`](archive/).
+
+## How this repo is built
+
+This project is built largely by AI coding sessions — some interactive, some
+running on a schedule — in small, verifiable steps:
+
+- **The task is the prompt, the PR is the response, review is the evaluation,
+  and the squash commit on `main` is the record.**
+- [`SPEC.md`](SPEC.md) is the source of truth for what to build; work bigger
+  than one PR is sequenced by a plan — a GitHub issue, with its tasks as
+  sub-issues.
+- Every change passes the same gate — one `check` command, run locally and in
+  CI — and a human merges it.
+- So `git log` on `main` reads one line per change, with its why in the body.
+
+Agents and humans starting fresh should read [`AGENTS.md`](AGENTS.md) first.
+
 ## Run it
 
 ```bash
@@ -25,17 +47,15 @@ npm install
 ```
 
 ```bash
-npm test
+npm run check
 ```
 
-`npm test` type-checks and runs every test. It proves the brief's three
-signs of success:
-
-| Sign of success | Proved by |
-|---|---|
-| Invalid rules data is refused at compile time. | [`tests/compile.test.ts`](tests/compile.test.ts), [`tests/layers.test.ts`](tests/layers.test.ts) |
-| Every ruleset runs to an end state with every seat filled by an AI. | [`tests/determinism.test.ts`](tests/determinism.test.ts) |
-| The same seed gives the same log, and replay gives the same final state. | [`tests/determinism.test.ts`](tests/determinism.test.ts) |
+`npm run check` is the gate every pull request passes, and CI runs it. It
+type-checks, compiles every ruleset alone and with each of its extensions,
+compiles every behavior set, loads every map, loads and plays every scenario,
+compares the play against the recorded matches, and runs the tests. One test
+plays matches in a Web Worker in headless Chromium; outside a cloud session,
+install the browser once with `npx playwright install chromium`.
 
 To watch a match, print its event log:
 
@@ -50,20 +70,6 @@ npm run play -- holdem four-handed 1 --quiet
 The arguments are the ruleset, the scenario, and the seed. Node 22.6 or later
 is needed; it runs the TypeScript directly, so there is no build step.
 
-## Check a change
-
-```bash
-npm run validate
-```
-
-This is the check a pull request must pass, and
-[the workflow](.github/workflows/validate.yml) runs it. It type-checks,
-compiles every ruleset alone and with each of its extensions, compiles every
-behavior set, loads every map, loads and plays every scenario, compares the play against the
-recorded matches, and runs the tests. One test plays matches in a Web Worker
-in headless Chromium; install the browser once with
-`npx playwright install chromium`.
-
 If a change is meant to alter how a match plays, regenerate the records and
 commit them with it:
 
@@ -71,7 +77,9 @@ commit them with it:
 npm run sim
 ```
 
-[`data/`](data/README.md) describes the records.
+[`data/`](data/README.md) describes the records. The rest of the commands,
+and how to contribute, are in [`AGENTS.md`](AGENTS.md) "Commands" and
+[`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## How it fits together
 
@@ -107,10 +115,6 @@ Read next:
 - [`docs/host.md`](docs/host.md): what an engine implements and calls: the
   space host's contract, and driving, explaining, replaying, and forking a
   match.
-- [`DECISIONS.md`](DECISIONS.md): the calls made during the build, including
-  answers to the brief's open questions.
-- [`HANDOFF.md`](HANDOFF.md): what works, what is stubbed, where the build
-  departed from the brief, and what comes next.
 
 ## Layout
 
@@ -125,7 +129,7 @@ Read next:
 | [`src/runtime/map.ts`](src/runtime/map.ts) | Maps: checked against a ruleset's `space`, and patched with what play has changed. |
 | [`src/load.ts`](src/load.ts) | Reads YAML from disk. Core itself never touches the file system. |
 | [`kit/`](kit), [`rulesets/`](rulesets) | Pure data. |
-| [`scripts/`](scripts) | `play` prints a match, `sim` records matches, `validate` is the pull-request check, `browser` times core in a Web Worker against Node. |
+| [`scripts/`](scripts) | `play` prints a match, `sim` records matches, `check.ts` is the data half of the gate, `browser` times core in a Web Worker against Node. |
 | [`data/`](data) | One record per recorded match. |
 | [`tests/`](tests) | The conformance tests, and a tick-driven fixture ruleset. |
 

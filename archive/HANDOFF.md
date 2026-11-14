@@ -3,8 +3,8 @@
 Where the core prototype stands after its third pass, which laid the
 groundwork for the spatial test studio (issue #3). The reasons behind each
 call are in [`DECISIONS.md`](DECISIONS.md) (cited as D-numbers); the format
-is in [`docs/format.md`](docs/format.md), and what a host implements and
-calls is in [`docs/host.md`](docs/host.md).
+is in [`docs/format.md`](../docs/format.md), and what a host implements and
+calls is in [`docs/host.md`](../docs/host.md).
 
 ## What works
 
@@ -47,7 +47,7 @@ shipped scenario played).
 - **A referee seat** that authors instances during play and rules that an
   intent happens out of turn.
 - **Recorded matches.** `npm run sim` writes one record per match to
-  [`data/matches.jsonl`](data/matches.jsonl) (D44). A record is now worked
+  [`data/matches.jsonl`](../data/matches.jsonl) (D44). A record is now worked
   out from the log alone (D56).
 
 ### The studio groundwork
