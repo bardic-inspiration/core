@@ -90,6 +90,26 @@ its own, and is checked against them.
 - **What the checks refuse and what the intents allow are tested against
   each other**: every character built by play passes the checks.
 
+### Monsters
+
+- **A monster is content built from parts.** The SRD's stat blocks share
+  most of their traits and actions: a few types recur often, and few are
+  unique. The ruleset declares each recurring type once, as a part with
+  its numbers left open, and a stat block fills parts in.
+- **The ledger counts parts, not monsters.** A part is a rule unit, with
+  its own tests and at least one stat block that uses it.
+- **At least 98% of the trait and action entries in the SRD's stat blocks
+  can be written with the parts.**
+- **The rest are examined one at a time.** A unique trait or action is
+  listed as excluded until it is, as is any rule that is closer to flavor
+  than mechanism: the open-ended use of Wish is not modelled.
+  Why: a part written for one stat block is a rule nothing else tests, and
+  the unique cases are where a wrong generalisation is most likely.
+
+A part here is a declaration in the ruleset. It is not a pattern of the kit
+([`format.md`](format.md) "Patterns"), though a part may be written with
+one.
+
 ### Two modes of play
 
 The SRD's rules fall into combat and everything else, and the two are held
@@ -112,7 +132,8 @@ to different tests.
 
 - The SRD 5.2 is broken into **rule units**, by chapter. Each unit is
   **modelled**, **left to the referee** (the rule calls for a ruling no
-  data can make), or **out of scope**, with a reason.
+  data can make), or **excluded**, with a reason. The excluded units are
+  the exclusion list: what is known to be missing, and why.
 - Each modelled unit names the tests that hold it. `check` fails when a
   named test does not exist, or a unit has no status.
 - Coverage is the share of units modelled, reported per chapter and per
@@ -177,13 +198,16 @@ Five layers, each catching what the others cannot.
   scripted stream in place of the seeded one, or a referee's ruling?
 - **How is a template distinguished from an instance**, and which content
   is copied into a match (a creature) and which is shared (a spell)?
-- **How much of a monster is a rule?** Whether every trait and action in
-  the SRD's stat blocks is a ledger unit, or only the mechanisms they are
-  built from.
+- **How is the 98% counted?** It needs a census of every trait and action
+  in the SRD's stat blocks, sorted by part. Whether that census is taken
+  from ttrpg-library's data, and where it is kept.
+- **Do spells and magic items get the same treatment**: a share of the
+  SRD's entries that the spell forms can write, and an exclusion list for
+  the rest?
 - **What is a rule unit's size**, and where does the ledger live: a data
   file `check` reads, or annotations in the ruleset?
-- **What coverage is enough?** The numbers for the quality bars: share of
-  units modelled, share left to the referee, and rule coverage.
+- **What coverage is enough?** The remaining numbers for the quality bars:
+  share of units modelled, share left to the referee, and rule coverage.
 - **How is time kept outside combat**, so that a duration of an hour and a
   rest mean something without a scheduler?
 - **Does the slice become the full ruleset, or stand beside it?**
