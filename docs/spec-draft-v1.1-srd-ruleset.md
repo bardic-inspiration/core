@@ -69,6 +69,27 @@ its own, and is checked against them.
 - **A scenario places content by reference.** One stat block stands for
   many creatures, each with its own position, seat, and state.
 
+### Characters
+
+- **Building a character is play.** Creating one and levelling it up are
+  intents chosen in a match, gated like any other, so a legal character is
+  one the rules allowed to be built.
+- **A character outlives its match.** It can be exported from one match and
+  brought into another, so a match does not always begin from blank
+  characters. An export is a content document: the character and what it
+  owns, with their state as it stood.
+- **A match is given its characters.** A scenario may leave places for
+  characters that the run fills, as it binds seats. They enter through
+  setup, so the log still rebuilds the match by itself (`INV-4`).
+- **An imported character is held to the kind's checks, not to its
+  history.** The checks on a character are therefore strong enough to
+  refuse one the intents could not have built (`INV-2`).
+  Why: the log that proved each choice legal does not travel with the
+  character, and requiring it would tie every character to every match it
+  has been through.
+- **What the checks refuse and what the intents allow are tested against
+  each other**: every character built by play passes the checks.
+
 ### Two modes of play
 
 The SRD's rules fall into combat and everything else, and the two are held
@@ -81,6 +102,9 @@ to different tests.
   seat. Nothing schedules a noncombat session.
   Why: noncombat play leans on a Dungeon Master, and seats for people and
   agents are outside v1.1.
+- **Building a character is the exception.** It needs no Dungeon Master, so
+  it is played: seats choosing at random build characters in simulated
+  matches, and every one must pass the checks.
 - **The seams are rules too**: entering combat (initiative, surprise),
   leaving it, and resting between fights.
 
@@ -131,7 +155,7 @@ Five layers, each catching what the others cannot.
 |---|---|
 | Rule tests | One or more per modelled unit: scripted decisions and known rolls, asserting on the log and the state. |
 | Content conformance | Every stat block's derived numbers equal the published ones. |
-| State properties | Every kind check holds after every simulated match. |
+| State properties | Every kind check holds after every simulated match, character-building matches included. |
 | Rule coverage | Core reports which intents, procedures, reactions, and branches of a compiled ruleset a set of matches ran. A rule nothing ran is reported. |
 | Recorded matches | Regression, over scenarios chosen to span the ledger's combat units. |
 
@@ -141,8 +165,14 @@ Five layers, each catching what the others cannot.
 
 ## Open questions
 
-- **Is building a character play or authoring?** Levelling up as intents
-  chosen in a match, or a character worked out when content is compiled.
+- **What does a character own?** An export takes the character and what
+  belongs to it (its equipment) and leaves what does not (a spell another
+  creature is concentrating on). Whether a relation says which it is.
+- **What of a character is the match's and not its own?** Position,
+  initiative, and a turn's budgets do not travel.
+- **Can a character cross ruleset versions**, or sets of extensions?
+- **How is a choice among many made at a prompt?** Enumeration lists every
+  binding, so preparing six spells of thirty cannot be one intent.
 - **How does a test fix a roll** without breaking `INV-3` and `INV-4`: a
   scripted stream in place of the seeded one, or a referee's ruling?
 - **How is a template distinguished from an instance**, and which content
