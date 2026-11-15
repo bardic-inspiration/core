@@ -71,7 +71,7 @@ is wrong even if CI is green.
 ├── scripts/           # play, sim, browser, and check.ts (part of the gate)
 ├── tests/             # vitest suites and test-only fixtures
 ├── data/              # recorded matches, checked by the gate
-├── docs/              # protocol docs (routing table below), format.md, host.md
+├── docs/              # protocol docs (routing table below), format.md, host.md, spec/ (spec areas)
 ├── archive/           # frozen pre-process docs — background only, never edited
 ├── .claude/           # Claude Code settings, hooks, skills
 └── .github/           # CI, Dependabot, issue & PR templates
