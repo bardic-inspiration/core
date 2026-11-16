@@ -137,8 +137,17 @@ Scoring is a multi-step algorithm. Four levels each supply a part of it:
 
 ### Prediction
 
-- Prediction extrapolates from a seat's awareness.
-- It is an approximation of the next turn, and is not weighted by memory.
+- Prediction extrapolates from a seat's awareness, and has the same four
+  levels as the rest of scoring: core's mechanics, the ruleset's definition,
+  the behavior's profile, and the entity's own filtering of its memory,
+  which a ruleset may tie to the entity's fields.
+- An entity predicts the actions of another entity. For one it has not
+  encountered, it applies its own profile to what its awareness shows of the
+  other at that moment.
+- As events caused by the other entity enter its memory, they weight the
+  prediction.
+- A prediction draws only on what the entity itself perceived and still
+  remembers.
 
 ### Bounds
 
