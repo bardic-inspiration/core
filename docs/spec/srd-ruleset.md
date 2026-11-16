@@ -130,7 +130,9 @@ Five layers, each catching what the others cannot.
 
 - **Rule coverage is a core feature**, not a 5e one: any ruleset's matches
   can be measured the same way.
-- **A rule test gives its rolls.** It does not search for a seed.
+- **A rule test gives its rolls.** It does not search for a seed. Giving
+  rolls is a debug override for tests, not a part of play
+  ([`SPEC.md`](../../SPEC.md) "The log, replay, and forks").
 
 ## Open questions
 
@@ -144,8 +146,6 @@ Not contract. Resolve one by editing this file, then delete it here.
 - **Can a character cross ruleset versions**, or sets of extensions?
 - **How is a choice among many made at a prompt?** Enumeration lists every
   binding, so preparing six spells of thirty cannot be one intent.
-- **How does a test fix a roll** without breaking `INV-3` and `INV-4`: a
-  scripted stream in place of the seeded one, or a referee's ruling?
 - **How is a template distinguished from an instance**, and which content is
   copied into a match (a creature) and which is shared (a spell)?
 - **How is the 98% counted?** It needs a census of every trait and action in

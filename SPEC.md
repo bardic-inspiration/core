@@ -178,6 +178,11 @@ The rules that hold across areas. An area's own rules are in its file.
   same again plays out the same match.
 - A snapshot is a match at a decision as plain data; a match restored from
   one plays on as the original would have.
+- `Planned (#TBD):` A match may be run with a debug override that gives
+  the results of its rolls in place of the seeded stream. A roll made under
+  it is marked in its log entry, and `replay` takes a marked roll from the
+  log, so such a log replays from itself alone (`INV-3`, `INV-4`).
+  Why: an unmarked roll would look like a seeded one and fail replay.
 
 ### Hidden information
 
