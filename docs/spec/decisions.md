@@ -146,6 +146,19 @@ Scoring is a multi-step algorithm. Four levels each supply a part of it:
   other at that moment.
 - As events caused by the other entity enter its memory, they weight the
   prediction.
+- A **prediction** is a weighted list of the intents the other entity may
+  choose next, from the state as it stands. Nothing is played forward.
+- The intents a predictor may consider are filtered. The ruleset holds the
+  conditions under which information about another entity is discovered and
+  may be used. In hold 'em every seat knows every intent, and only the
+  cards are hidden. In the 5e ruleset what a character knows of another's
+  options depends on its situation.
+- Where the predictor does not know the other's options, the list is a
+  guess from two sources: the assumptions in its profile about what
+  entities of a type typically do, and its memory of what like entities
+  have done.
+- The more precedent memory holds, and the more consistent it is, the more
+  memory weighs against the profile's assumptions.
 - A prediction draws only on what the entity itself perceived and still
   remembers.
 
@@ -179,12 +192,13 @@ Scoring is a multi-step algorithm. Four levels each supply a part of it:
 
 Not contract. Resolve one by editing this file, then delete it here.
 
-- **What does prediction compute, and how?** A score sees one option and
-  the current state, and a turn in the 5e slice is many decisions (`move` is
-  one square), so "walk four squares, then attack" cannot be weighed against
-  "attack now". Whether prediction runs the rules forward on a copy of the
-  match, or evaluates an estimate the ruleset declares; what it may assume
-  about dice and other seats; and what it costs.
+- **How does a seat act coherently over its own turn of many decisions?**
+  A score sees one option and the current state, and a turn in the 5e slice
+  is many decisions (`move` is one square), so "walk four squares, then
+  attack" cannot be weighed against "attack now". Prediction concerns other
+  entities and plays nothing forward, so it does not answer this.
+- **How is "like" decided** between a remembered entity and the one being
+  predicted, and how are the amount and consistency of precedent measured?
 - **How does awareness relate to `visible`?** Today a seat's options and
   scores are worked out through its view, and reading a hidden value there
   is an error.
