@@ -146,8 +146,9 @@ Scoring is a multi-step algorithm. Four levels each supply a part of it:
   other at that moment.
 - As events caused by the other entity enter its memory, they weight the
   prediction.
-- A **prediction** is a weighted list of the intents the other entity may
-  choose next, from the state as it stands. Nothing is played forward.
+- A **prediction** of another entity is a weighted list of the intents it
+  may choose next, from the state as it stands. Nothing of the other
+  entity's is played forward.
 - The intents a predictor may consider are filtered. The ruleset holds the
   conditions under which information about another entity is discovered and
   may be used. In hold 'em every seat knows every intent, and only the
@@ -161,6 +162,16 @@ Scoring is a multi-step algorithm. Four levels each supply a part of it:
   memory weighs against the profile's assumptions.
 - A prediction draws only on what the entity itself perceived and still
   remembers.
+
+### Predicting itself
+
+- An entity may predict its own actions. This is lookahead: it weighs a
+  path of its own decisions, not only the next one.
+- By default an entity is fully aware of its own capabilities and fully
+  confident in them.
+- A path that passes through an outcome of chance outside the entity's
+  control, such as a leap that calls for an Athletics check, carries less
+  confidence, by a blind assessment of the probability.
 
 ### Bounds
 
@@ -192,11 +203,12 @@ Scoring is a multi-step algorithm. Four levels each supply a part of it:
 
 Not contract. Resolve one by editing this file, then delete it here.
 
-- **How does a seat act coherently over its own turn of many decisions?**
-  A score sees one option and the current state, and a turn in the 5e slice
-  is many decisions (`move` is one square), so "walk four squares, then
-  attack" cannot be weighed against "attack now". Prediction concerns other
-  entities and plays nothing forward, so it does not answer this.
+- **What does lookahead do where the entity cannot know what comes
+  next**: a roll, another seat's decision in the middle of a path, a value
+  hidden from it? And where does the probability of a chance outcome come
+  from?
+- **How far does lookahead reach**, in what unit, and how many paths may it
+  weigh? Core has no notion of a turn; the flow is the ruleset's.
 - **How is "like" decided** between a remembered entity and the one being
   predicted, and how are the amount and consistency of precedent measured?
 - **How does awareness relate to `visible`?** Today a seat's options and
