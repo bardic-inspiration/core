@@ -173,6 +173,26 @@ Scoring is a multi-step algorithm. Four levels each supply a part of it:
   control, such as a leap that calls for an Athletics check, carries less
   confidence, by a blind assessment of the probability.
 
+### What an entity does not know
+
+- **A seat's knowledge and its prediction model are separate.** A prediction
+  never reads another seat's data. It is compiled from precedent in the
+  entity's memory, and falls back on its profile where there is none.
+- Where a path reaches something the entity cannot know (a roll, another
+  entity's decision, a hidden value), the weight comes from the same two
+  sources: a default in its profile, and what its memory has taught it.
+- A profile's assumption is conditioned on what the entity is aware of, not
+  on the other entity's state. A worg assumes a hostile creature that has
+  not yet used its reaction will make an opportunity attack; it does not
+  read the scout's attack bonus or its intent.
+- Memory supports inference about what is hidden. A creature that has hit
+  often against the entity's Armor Class is taken to have a high attack
+  bonus; a caster seen to cast Shield is taken to have it prepared, and to
+  be likely to hold its reaction for it.
+- Where there is no information at all, the profile says what that is
+  worth: nothing, or a greater threat. A profile may be optimistic,
+  pessimistic, or neutral under uncertainty.
+
 ### Bounds
 
 - The parameters of awareness, memory, and prediction are bounded by core,
@@ -203,10 +223,12 @@ Scoring is a multi-step algorithm. Four levels each supply a part of it:
 
 Not contract. Resolve one by editing this file, then delete it here.
 
-- **What does lookahead do where the entity cannot know what comes
-  next**: a roll, another seat's decision in the middle of a path, a value
-  hidden from it? And where does the probability of a chance outcome come
-  from?
+- **What does lookahead run?** Whether an entity's own intents are applied
+  through the rules' effects on a copy of what it is aware of, or the path
+  is weighed without running any rule; and where a path ends.
+- **How are a profile's assumptions and memory's inferences written?** What
+  an assumption is conditioned on, what it yields, and how a pattern of
+  remembered events becomes a weight.
 - **How far does lookahead reach**, in what unit, and how many paths may it
   weigh? Core has no notion of a turn; the flow is the ruleset's.
 - **How is "like" decided** between a remembered entity and the one being
