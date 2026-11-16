@@ -102,6 +102,10 @@ Scoring is a multi-step algorithm. Four levels each supply a part of it:
 | Behavior | Configuration: **profiles**, preset or derived. |
 | Scenario and the current turn | The inputs themselves. |
 
+- **A seat owns its awareness, its memory, and its profile.** Core knows
+  seats, not which entity is acting. A seat that plays several entities
+  knows as one what any of them perceives. A ruleset that wants each
+  creature to know only its own gives each its own seat.
 - A seat's **considerations** are assembled from three sources: its
   awareness, its memory, and its predictions.
 - Scoring reads the three and derives a selection set by applying sets of
@@ -121,8 +125,8 @@ Scoring is a multi-step algorithm. Four levels each supply a part of it:
 - The ruleset says how it is worked out. In hold 'em it is whether a card is
   hidden or revealed; in the 5e ruleset it turns on checks such as
   Perception and Insight.
-- By default an entity is aware of everything it holds. A ruleset may make
-  an entity unaware of some of its own values.
+- By default a seat is aware of everything its own entities hold. A ruleset
+  may make a seat unaware of some of its own values.
 
 ### Memory
 
@@ -151,9 +155,9 @@ Scoring is a multi-step algorithm. Four levels each supply a part of it:
 
 - Prediction extrapolates from a seat's awareness, and has the same four
   levels as the rest of scoring: core's mechanics, the ruleset's definition,
-  the behavior's profile, and the entity's own filtering of its memory,
-  which a ruleset may tie to the entity's fields.
-- An entity predicts the actions of another entity. For one it has not
+  the behavior's profile, and the seat's own filtering of its memory, which
+  a ruleset may tie to the fields of the seat's entities.
+- A seat predicts the actions of an entity that is not its own. For one it has not
   encountered, it applies its own profile to what its awareness shows of the
   other at that moment.
 - As events caused by the other entity enter its memory, they weight the
@@ -172,33 +176,33 @@ Scoring is a multi-step algorithm. Four levels each supply a part of it:
   have done.
 - The more precedent memory holds, and the more consistent it is, the more
   memory weighs against the profile's assumptions.
-- A prediction draws only on what the entity itself perceived and still
+- A prediction draws only on what the seat itself perceived and still
   remembers.
 
 ### Predicting itself
 
-- An entity may predict its own actions. This is lookahead: it weighs a
+- A seat may predict its own actions. This is lookahead: it weighs a
   path of its own decisions, not only the next one.
-- By default an entity is fully aware of its own capabilities and fully
+- By default a seat is fully aware of its own capabilities and fully
   confident in them.
-- A path that passes through an outcome of chance outside the entity's
+- A path that passes through an outcome of chance outside the seat's
   control, such as a leap that calls for an Athletics check, carries less
   confidence, by a blind assessment of the probability.
 
-### What an entity does not know
+### What a seat does not know
 
 - **A seat's knowledge and its prediction model are separate.** A prediction
   never reads another seat's data. It is compiled from precedent in the
-  entity's memory, and falls back on its profile where there is none.
-- Where a path reaches something the entity cannot know (a roll, another
+  seat's memory, and falls back on its profile where there is none.
+- Where a path reaches something the seat cannot know (a roll, another
   entity's decision, a hidden value), the weight comes from the same two
   sources: a default in its profile, and what its memory has taught it.
-- A profile's assumption is conditioned on what the entity is aware of, not
+- A profile's assumption is conditioned on what the seat is aware of, not
   on the other entity's state. A worg assumes a hostile creature that has
   not yet used its reaction will make an opportunity attack; it does not
   read the scout's attack bonus or its intent.
 - Memory supports inference about what is hidden. A creature that has hit
-  often against the entity's Armor Class is taken to have a high attack
+  often against its creature's Armor Class is taken to have a high attack
   bonus; a caster seen to cast Shield is taken to have it prepared, and to
   be likely to hold its reaction for it.
 - Where there is no information at all, the profile says what that is
@@ -209,8 +213,9 @@ Scoring is a multi-step algorithm. Four levels each supply a part of it:
 
 - The parameters of awareness, memory, and prediction are bounded by core,
   for performance and to prevent failure; defined within those bounds by the
-  ruleset; and configurable within the ruleset's definition per entity. In
-  the 5e ruleset an entity's memory length may follow its Intelligence, its
+  ruleset; and set within the ruleset's definition per seat, from the state.
+  In the 5e ruleset a seat's memory length may follow its creature's
+  Intelligence, its
   awareness of some types of event its Perception, and the weight it gives
   remembered actions of other creatures its Insight.
 
@@ -248,8 +253,6 @@ Not contract. Resolve one by editing this file, then delete it here.
 - **How does awareness relate to `visible`?** Today a seat's options and
   scores are worked out through its view, and reading a hidden value there
   is an error.
-- **Whose awareness and memory does a decision use** when a seat drives
-  several entities, or none?
 - **What is a profile**, and what does a derived one derive from?
 - **What are core's bounds**, as numbers?
 - **Is rule data that exists only for behaviors acceptable**, or does a
