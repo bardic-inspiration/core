@@ -68,6 +68,10 @@ its own, and is checked against them.
 - **A match is given its characters.** A scenario may leave places for
   characters that the run fills, as it binds seats. They enter through
   setup, so the log still rebuilds the match by itself (`INV-4`).
+- **The scenario's place for a character overrides what the export
+  carried.** A position, or anything else the place gives, replaces the
+  exported value. What the place does not give, and still does not fit the
+  match, is refused like any invalid setup (`INV-2`).
 - **An imported character is held to the kind's checks, not to its
   history.** The checks on a character are strong enough to refuse one the
   intents could not have built (`INV-2`).
@@ -144,8 +148,6 @@ Five layers, each catching what the others cannot.
 
 Not contract. Resolve one by editing this file, then delete it here.
 
-- **What does an import do with what does not fit the new match**: a
-  position on another map, a link to an entity that is not there?
 - **Can a character cross ruleset versions**, or sets of extensions?
 - **How is a template distinguished from an instance**, and which content is
   copied into a match (a creature) and which is shared (a spell)?
