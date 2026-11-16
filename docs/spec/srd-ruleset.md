@@ -24,9 +24,13 @@ exercise each rule, and a measure of how much of the SRD it covers.
 - **The rules are the success condition; the content is not.** The ruleset
   does not hold every SRD spell, monster, and item.
 - **All twelve classes are in**, levels 1 to 20, each with the subclass the
-  SRD gives it, along with feats and species traits.
+  SRD gives it, along with feats and species traits, and a character is
+  built by play ([Characters](#characters)).
   Why: a class feature changes how something resolves, so it is a rule, and
   the classes are the largest part of the SRD's rules.
+- **The classes are modelled for combat first.** A noncombat feature that
+  the tests cannot exercise is stubbed: present in the ruleset with no
+  effect, and listed as stubbed in the ledger.
 - **The ruleset is the format's proof.** A rule the format cannot express is
   a gap in the format, never code in the ruleset (`INV-1`).
 - **Only the SRD 5.2.** A rule from outside it is not in the ruleset.
@@ -126,8 +130,9 @@ its own, and is checked against them.
 ## Coverage
 
 - The SRD 5.2 is broken into **rule units**, by chapter. Each unit is
-  **modelled**, **left to the referee** (the rule calls for a ruling no data
-  can make), or **excluded**, with a reason.
+  **modelled**, **stubbed** (present with no effect), **left to the
+  referee** (the rule calls for a ruling no data can make), or
+  **excluded**, with a reason.
 - Each modelled unit names the tests that hold it. `check` fails when a
   named test does not exist, or a unit has no status.
 - Coverage is the share of units modelled, reported per chapter and per
