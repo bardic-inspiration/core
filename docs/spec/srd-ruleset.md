@@ -25,6 +25,8 @@ exercise each rule, and a measure of how much of the SRD it covers.
 - **The ruleset is the format's proof.** A rule the format cannot express is
   a gap in the format, never code in the ruleset (`INV-1`).
 - **Only the SRD 5.2.** A rule from outside it is not in the ruleset.
+- **The 5e slice grows into this ruleset.** There is one 5e ruleset, not a
+  slice and a full one side by side.
 
 ## The hierarchy of documents
 
@@ -158,7 +160,7 @@ Not contract. Resolve one by editing this file, then delete it here.
   to the referee, and the rule coverage a set of matches must reach.
 - **How is time kept outside combat**, so that a duration of an hour and a
   rest mean something without a scheduler?
-- **Does the slice become the full ruleset, or stand beside it?**
+- **What is the ruleset's id** once it is no longer a slice?
 - **Is content conformance checked against ttrpg-library**, or only against
   numbers written into the content itself?
 - **Which format changes do the hard cases need?** Each is unknown until it
