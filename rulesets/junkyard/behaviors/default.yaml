@@ -16,21 +16,29 @@ behaviors:
       # Fight: hit whatever of another seat is awake and in reach.
       strike: "target.awake ? 12 * bot.drive['fight'] : -1"
 
-      # Hoard, onto itself: a working part it can use, most of all one that does a
-      # job it cannot do yet. It leaves its own seat's machines alone, and takes
-      # no more than its legs can carry.
-      # Build, onto another: what a machine needs to wake and get about, when
+      # Onto itself, hoard: a working part it can use, most of all one that
+      # does a job it cannot do yet. It leaves its own seat's machines alone,
+      # takes no more than its legs can carry, and, if it builds, keeps its last
+      # socket free. Onto itself, build: into that socket goes a part some
+      # shell in sight has none of, to carry there.
+      # Onto another, build: what a machine needs to wake and get about, when
       # that machine has none. It gives away its own part only if it keeps
-      # another that does the job.
+      # another that does the job, and legs enough to carry itself.
       attach: >-
         onto == bot
           ? (part.broken || part.job == 'none' || part.job == 'frame'
               || part.mountedOn.exists(m, m.seat == bot.seat)
               || (bot.does['legs'] > 0 && part.job != 'legs' && 4 * bot.does['legs'] <= bot.mounts.size())
             ? -1
-            : bot.drive['hoard'] * (2 + part.rate + (bot.does[part.job] == 0 ? 6 : 0)))
+            : max(
+                bot.free > 1 || bot.drive['build'] == 0
+                  ? bot.drive['hoard'] * (2 + part.rate + (bot.does[part.job] == 0 ? 6 : 0)) : 0,
+                part.job in ['eye', 'brain', 'generator', 'gripper', 'legs'] && bot.does[part.job] > 0
+                    && bot.seesMachines.exists(m, !m.awake && m.free > 0 && m.does[part.job] == 0 && part.rate <= m.gauge)
+                  ? bot.drive['build'] * (6 + part.rate) : 0))
           : (part.broken || !(part.job in ['eye', 'brain', 'generator', 'gripper', 'legs']) || onto.does[part.job] > 0
-              || part.mountedOn.exists(m, m == bot ? bot.does[part.job] <= part.rate : m.seat == bot.seat)
+              || part.mountedOn.exists(m, m != bot ? m.seat == bot.seat
+                : bot.does[part.job] <= part.rate || (part.job == 'legs' && 4 * (bot.does['legs'] - part.rate) < bot.mounts.size() - 1))
             ? -1
             : bot.drive['build'] * (8 + part.rate))
 
@@ -38,12 +46,13 @@ behaviors:
       lay: >-
         frame.mountedOn.exists(m, m != bot) || bot.seesMachines.exists(m, m.seat == bot.seat && !m.awake)
           ? -1
-          : 6 * bot.drive['build']
+          : (4 + 2 * frame.rate) * bot.drive['build']
 
-      # Its own seat's parts first. A builder also mends what lies about.
+      # Its own seat's parts first, then a shell's, which makes the shell its seat's. A builder also mends what lies about.
       mend: >-
-        part.mountedOn.exists(m, m.seat == bot.seat) ? 20
-          : part.job == 'none' ? -1
+        part.job == 'none' ? -1
+          : part.mountedOn.exists(m, m.seat == bot.seat) ? 20
+          : part.mountedOn.size() > 0 ? 12
           : 3 + 2 * bot.drive['build']
 
       # Nearly out of charge, it burns junk and broken parts, and anything loose if it has no generator.
@@ -57,31 +66,44 @@ behaviors:
       # Sheds what it cannot use.
       drop: "(part.broken && bot.does['welder'] == 0) || part.job == 'none' ? 4 : -1"
 
-      # Heads for the nearest thing it sees and wants: prey, if it can fight;
-      # otherwise scrap or a shell worth stripping, a frame to set down, or a
-      # machine it has a spare part for. Seeing nothing, it wanders.
+      # Runs from an armed machine of another seat that comes close, unless it
+      # can fight. Otherwise heads for the nearest thing it sees and wants:
+      # prey, the farther off the harder it fights; scrap or a shell worth
+      # stripping; a shell to mend; a frame to set down; a part a
+      # shell in sight has none of; or a machine it has a spare part for.
+      # Seeing nothing, it wanders.
       move: >-
+        cel.bind(hunts, bot.drive['fight'] > 0 && bot.does['striker'] > 0,
         cel.bind(takes, bot.drive['hoard'] > 0 && bot.does['gripper'] > 0 && bot.free > 0,
         cel.bind(builds, bot.drive['build'] > 0 && bot.does['gripper'] > 0,
         cel.bind(laden, 4 * bot.does['legs'] <= bot.mounts.size(),
+        cel.bind(shells, bot.seesMachines.filter(m, !m.awake && m.free > 0),
         cel.bind(tending, bot.seesMachines.exists(m, m.seat == bot.seat && !m.awake),
-        cel.bind(prey, bot.seesMachines.filter(m, bot.drive['fight'] > 0 && bot.does['striker'] > 0 && m.awake && m.seat != bot.seat),
+        cel.bind(threats, bot.seesMachines.filter(m, !hunts && m.awake && m.seat != bot.seat && m.does['striker'] > 0 && distance(m.pos, bot.pos) <= 3),
+        cel.bind(prey, bot.seesMachines.filter(m, hunts && m.awake && m.seat != bot.seat && distance(m.pos, bot.pos) <= 2 * bot.drive['fight']),
         cel.bind(goals,
-          prey.size() > 0 ? prey.map(m, m.pos)
-            : bot.seesPiles.filter(p, p.holds.exists(x, !x.broken
+          threats.size() > 0 ? threats.map(m, m.pos)
+            : prey.size() > 0 ? prey.map(m, m.pos)
+            : bot.seesPiles.filter(p, p.holds.exists(x, !x.broken && (!laden || x.job == 'legs')
                   && (x.job == 'frame' ? builds && !tending
-                    : takes && x.job != 'none' && x.rate <= bot.gauge && (!laden || x.job == 'legs')))).map(p, p.pos)
+                    : x.job != 'none' && x.rate <= bot.gauge && bot.free > 0
+                      && ((takes && (bot.free > 1 || bot.drive['build'] == 0))
+                        || (builds && x.job in ['eye', 'brain', 'generator', 'gripper', 'legs'] && bot.does[x.job] > 0
+                          && shells.exists(m, m.does[x.job] == 0 && x.rate <= m.gauge)))))).map(p, p.pos)
               + bot.seesMachines.filter(m,
-                  (takes && !m.awake && m.seat != bot.seat
-                    && m.mounts.exists(x, !x.broken && x.job != 'none' && x.job != 'frame' && x.rate <= bot.gauge && (!laden || x.job == 'legs')))
+                  (takes && !laden && !m.awake && m.seat != bot.seat
+                    && m.mounts.exists(x, !x.broken && x.job != 'none' && x.job != 'frame' && x.rate <= bot.gauge
+                      && (bot.free > 1 || bot.drive['build'] == 0)))
+                  || (bot.does['welder'] > 0 && !m.awake && m.mounts.exists(x, x.broken && x.job != 'none'))
                   || (builds && (m.seat == bot.seat || !m.awake) && m.free > 0
                     && bot.working.exists(x, x.job in ['eye', 'brain', 'generator', 'gripper', 'legs']
                       && m.does[x.job] == 0 && bot.does[x.job] > x.rate && x.rate <= m.gauge))).map(m, m.pos),
         cel.bind(near, goals.size() == 0 ? 0 : goals.map(c, distance(bot.pos, c)).min(),
         cel.bind(gain, goals.size() == 0 ? 0 : near - goals.map(c, distance(to, c)).min(),
           goals.size() == 0 ? 2
+            : threats.size() > 0 ? 3 - 6 * gain
             : gain != 0 ? 2 + 6 * gain
             : near <= 1 ? 0
-            : 2))))))))
+            : 2)))))))))))
     goals:
       - { name: cool off, when: "bot.heat + 2 > game.meltAt", scale: { strike: 0, lay: 0, mend: 0, burn: 0 } }

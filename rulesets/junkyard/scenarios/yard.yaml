@@ -46,12 +46,12 @@ entities:
   - { id: m-panel, kind: part, fields: { flow: energy, role: source } }
   - { id: m-weld, kind: part, fields: { flow: matter, role: converter } }
 
-  - { id: c-eye, kind: part, fields: { flow: signal, role: sensor, rate: 2 } }
-  - { id: c-brain, kind: part, fields: { flow: signal, role: gate, drives: { hoard: 1, build: 0, fight: 3 } } }
+  - { id: c-eye, kind: part, fields: { flow: signal, role: sensor } }
+  - { id: c-brain, kind: part, fields: { flow: signal, role: gate, drives: { hoard: 2, build: 0, fight: 2 } } }
   - { id: c-legs, kind: part, fields: { flow: motion, role: source, rate: 2 } }
-  - { id: c-ram, kind: part, fields: { flow: motion, role: gate, rate: 2 } }
+  - { id: c-ram, kind: part, fields: { flow: motion, role: gate } }
   - { id: c-grip, kind: part, fields: { flow: matter, role: gate } }
-  - { id: c-panel, kind: part, fields: { flow: energy, role: source, rate: 2 } }
+  - { id: c-panel, kind: part, fields: { flow: energy, role: source } }
 
   - { id: p-eye, kind: part, fields: { flow: signal, role: sensor } }
   - { id: p-brain, kind: part, fields: { flow: signal, role: gate, drives: { hoard: 2, build: 2, fight: 1 } } }

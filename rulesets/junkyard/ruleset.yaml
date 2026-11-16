@@ -111,7 +111,7 @@ kinds:
   machine:
     doc: A frame standing in the yard, with whatever is bolted to it. Awake, it is a robot; asleep, a shell.
     fields:
-      seat: { type: seat, doc: "Whose it is. A shell goes to whoever next bolts a part onto it." }
+      seat: { type: seat, doc: "Whose it is. A shell goes to whoever next bolts a part onto it or mends one on it." }
       pos: cell
       gauge: { type: int, default: 1, doc: "The frame's size, from 1 to 3. It takes parts rated up to this, in two sockets more than twice as many." }
       heat: { type: int, default: 0, doc: "Work turns charge into heat, and a tick sheds some." }
@@ -134,7 +134,7 @@ kinds:
         type: bool
         doc: Each point of legs carries four parts. A machine heavier than that stays where it is.
         value: "self.does['legs'] > 0 && 4 * self.does['legs'] >= self.mounts.size()"
-      sight: { type: int, doc: How far its eyes reach., value: "4 * self.does['eye']" }
+      sight: { type: int, doc: How far its eyes reach., value: "6 * self.does['eye']" }
       seesPiles:
         type: list<pile>
         value: "all.pile.filter(p, distance(self.pos, p.pos) <= self.sight && lineOfSight(self.pos, p.pos))"
@@ -358,7 +358,7 @@ intents:
         with: { bot: bot, cost: 2 }
 
   mend:
-    doc: Make a broken part within reach work again. Needs a welder, and two points of charge.
+    doc: Make a broken part within reach work again. Needs a welder, and two points of charge. A shell goes to the seat of whoever mends a part on it.
     params:
       bot: machine
       part: { type: part, in: "bot.reach.filter(p, p.broken && bot.does['welder'] > 0 && bot.charge >= 2)" }
@@ -366,10 +366,15 @@ intents:
       - let: { asleep: "part.mountedOn.exists(m, !m.awake)" }
       - set: { part.broken: false }
       - each: holder
-        in: "part.mountedOn.filter(m, asleep && m.awake)"
+        in: "part.mountedOn.filter(m, asleep)"
         do:
-          - emit: machine.woke
-            with: { machine: holder }
+          - if: "holder.seat != bot.seat"
+            then:
+              - set: { holder.seat: bot.seat }
+          - if: "holder.awake"
+            then:
+              - emit: machine.woke
+                with: { machine: holder }
       - call: work
         with: { bot: bot, cost: 2 }
 
@@ -400,7 +405,7 @@ intents:
     gate: "bot.charge >= 2"
     effects:
       - roll: { as: swing, d: 6 }
-      - if: "swing + bot.does['striker'] > 3 + target.armor"
+      - if: "swing + bot.does['striker'] > 4 + target.armor"
         then:
           - if: "target.working.size() > 0"
             then:
