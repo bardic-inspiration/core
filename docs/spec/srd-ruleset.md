@@ -15,9 +15,14 @@ concentration, with stat blocks and spells written inline in each scenario.
 A ruleset that models the rules of the SRD 5.2, with enough content to
 exercise each rule, and a measure of how much of the SRD it covers.
 
-- **The rules are the success condition; the content is not.** Every rule is
-  modelled or accounted for in the ledger ([Coverage](#coverage)). The
-  ruleset does not hold every SRD spell, monster, and item.
+- **Combat is modelled in full.** Every combat rule is modelled or
+  accounted for in the ledger ([Coverage](#coverage)).
+- **Noncombat rules are modelled by example.** Enough cases, ability checks
+  among them, are modelled to give a basis for designing encounters. The
+  SRD's open-ended rules for interacting with the world are not covered in
+  full.
+- **The rules are the success condition; the content is not.** The ruleset
+  does not hold every SRD spell, monster, and item.
 - **All twelve classes are in**, levels 1 to 20, each with the subclass the
   SRD gives it, along with feats and species traits.
   Why: a class feature changes how something resolves, so it is a rule, and
@@ -70,8 +75,12 @@ its own, and is checked against them.
   setup, so the log still rebuilds the match by itself (`INV-4`).
 - **The scenario's place for a character overrides what the export
   carried.** A position, or anything else the place gives, replaces the
-  exported value. What the place does not give, and still does not fit the
-  match, is refused like any invalid setup (`INV-2`).
+  exported value.
+- **A link to an entity that is not in the match is not made.** The import
+  reports it as a warning and setup goes on.
+  Why: an export takes everything, so it carries links that meant something
+  only in the match it left; refusing the character for them would make
+  every export unusable until exports are narrowed.
 - **An imported character is held to the kind's checks, not to its
   history.** The checks on a character are strong enough to refuse one the
   intents could not have built (`INV-2`).
@@ -123,8 +132,6 @@ its own, and is checked against them.
   named test does not exist, or a unit has no status.
 - Coverage is the share of units modelled, reported per chapter and per
   mode.
-- **At least 98% of the trait and action entries in the SRD's stat blocks
-  can be written with the parts.**
 
 ## Testing
 
@@ -151,16 +158,16 @@ Not contract. Resolve one by editing this file, then delete it here.
 - **Can a character cross ruleset versions**, or sets of extensions?
 - **How is a template distinguished from an instance**, and which content is
   copied into a match (a creature) and which is shared (a spell)?
-- **How is the 98% counted?** It needs a census of every trait and action in
-  the SRD's stat blocks, sorted by part. Whether that census is taken from
-  ttrpg-library's data, and where it is kept.
-- **Do spells and magic items get the same treatment**: a share of the SRD's
-  entries that the spell forms can write, and an exclusion list for the
-  rest?
+- **Are spells and magic items built from parts as monsters are**, with an
+  exclusion list for the rest?
 - **What is a rule unit's size**, and where does the ledger live: a data
   file `check` reads, or annotations in the ruleset?
-- **What coverage is enough?** The share of units modelled, the share left
-  to the referee, and the rule coverage a set of matches must reach.
+- **Where does combat end?** Which rule units count as combat, and so must
+  be modelled: the seams, resting, a spell with uses in and out of a fight.
+- **Which noncombat examples are enough**, and does the ledger list the
+  noncombat chapters at all?
+- **Where is an import's warning reported?** Core refuses or accepts today;
+  it has no warnings.
 - **How is time kept outside combat**, so that a duration of an hour and a
   rest mean something without a scheduler?
 - **What is the ruleset's id** once it is no longer a slice?
