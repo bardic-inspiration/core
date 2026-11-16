@@ -18,7 +18,8 @@ Every decision in a match goes through the same three stages.
 ### Ask
 
 - A `prompt` effect names a seat, the params it gives (`with`), and the
-  intents or menus on `offer`.
+  intents or menus on `offer`. A menu stands for its intents, in place; an
+  intent offered twice is offered once.
 - The runtime enumerates every binding of the offered intents' remaining
   params: intents in the order offered, params in the order declared, each
   param's `in` list in its own order.
