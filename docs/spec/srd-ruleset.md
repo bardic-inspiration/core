@@ -73,6 +73,10 @@ its own, and is checked against them.
   character, and requiring it would tie every character to every match it
   has been through.
 - **Every character built by play passes the checks.**
+- **A choice of several is made one at a time**
+  ([`decisions.md`](decisions.md) "Decisions with large ranges"). The
+  ruleset may also offer presets, for configuring a class and for preparing
+  spells, that make many such choices at once.
 
 ## Monsters
 

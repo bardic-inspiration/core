@@ -266,6 +266,14 @@ Scoring is a multi-step algorithm. Four levels each supply a part of it:
   `raise`.
 - A scripted seat derives such a value from its profile, its awareness, its
   memory, and its predictions.
+- **The legal values of such a param are worked out before the intent is
+  offered.** An intent with no legal value is not offered, so a seat is
+  never offered what it cannot choose, and a prompt still knows when
+  nothing is legal.
+- A value outside the legal ones is refused as an index that is not an
+  option is: an error that records nothing.
+- **Several of many are chosen one at a time**, as a sequence of single
+  decisions: six spells of thirty are six decisions.
 
 ## Selection
 
@@ -313,12 +321,11 @@ Not contract. Resolve one by editing this file, then delete it here.
 - **Where does path distance come from?** A seventh host function, or core
   working it out from `neighbors`. Either changes the host contract's
   version.
-- **What does core check of a value a seat gives**, and when? Today every
-  option listed has passed every gate, so a seat cannot choose anything
-  illegal, and a prompt knows when nothing is legal.
+- **How are a ranged param's legal values declared**, so that they are
+  worked out without listing each: as bounds given by expressions, and
+  whether a gate may still read the param.
 - **How far does the hierarchy go?** Whether every param is chosen level by
-  level after the intent, and how several of many are chosen: six spells of
-  thirty.
+  level after the intent.
 - **How is a decision with a given value recorded, explained, and counted**
   (`of`) in the log?
 - **Do the old score expressions remain** beside considerations, or is
