@@ -144,8 +144,6 @@ Not contract. Resolve one by editing this file, then delete it here.
 - **What of a character is the match's and not its own?** Position,
   initiative, and a turn's budgets do not travel.
 - **Can a character cross ruleset versions**, or sets of extensions?
-- **How is a choice among many made at a prompt?** Enumeration lists every
-  binding, so preparing six spells of thirty cannot be one intent.
 - **How is a template distinguished from an instance**, and which content is
   copied into a match (a creature) and which is shared (a spell)?
 - **How is the 98% counted?** It needs a census of every trait and action in

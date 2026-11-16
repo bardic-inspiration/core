@@ -251,6 +251,22 @@ Scoring is a multi-step algorithm. Four levels each supply a part of it:
 - Core exposes measures of the pipeline for analysis, so a configuration
   can be refined against them.
 
+## Decisions with large ranges
+
+`Planned (#TBD):`
+
+- **A decision is hierarchical.** An intent whose params have a very large
+  range is not listed once per binding. In hold 'em the decision's list is
+  `raise`, `call`, `fold`.
+  Why: listing every binding of a wide param is inefficient at best and
+  impossible at worst, and cutting the range to a few values changes the
+  game.
+- **A scalar param with a range is a parameter of the decision**, not an
+  entry in its list. The amount of a raise is given by the seat that chooses
+  `raise`.
+- A scripted seat derives such a value from its profile, its awareness, its
+  memory, and its predictions.
+
 ## Selection
 
 `Planned (#TBD):`
@@ -297,7 +313,13 @@ Not contract. Resolve one by editing this file, then delete it here.
 - **Where does path distance come from?** A seventh host function, or core
   working it out from `neighbors`. Either changes the host contract's
   version.
-- **Can a param's domain be a range?** Enumeration lists every binding, so
-  hold 'em's raise is cut to four amounts.
+- **What does core check of a value a seat gives**, and when? Today every
+  option listed has passed every gate, so a seat cannot choose anything
+  illegal, and a prompt knows when nothing is legal.
+- **How far does the hierarchy go?** Whether every param is chosen level by
+  level after the intent, and how several of many are chosen: six spells of
+  thirty.
+- **How is a decision with a given value recorded, explained, and counted**
+  (`of`) in the log?
 - **Do the old score expressions remain** beside considerations, or is
   every shipped behavior set rewritten and the old form refused?
