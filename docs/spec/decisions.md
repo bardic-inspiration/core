@@ -106,6 +106,8 @@ Scoring is a multi-step algorithm. Four levels each supply a part of it:
   seats, not which entity is acting. A seat that plays several entities
   knows as one what any of them perceives. A ruleset that wants each
   creature to know only its own gives each its own seat.
+- A seat's awareness, memory, and predictions are worked out again only for
+  what has changed since they were last worked out (`INV-6`).
 - A seat's **considerations** are assembled from three sources: its
   awareness, its memory, and its predictions.
 - Scoring reads the three and derives a selection set by applying sets of

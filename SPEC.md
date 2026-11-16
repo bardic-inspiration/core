@@ -58,6 +58,10 @@ green.
 - **`INV-5` — Host-agnostic.** Nothing reachable from `src/index.ts` imports
   Node or touches the file system; core runs unchanged in a browser or a Web
   Worker, and writes the same logs there as in Node.
+- **`INV-6` — Proportional work.** `Planned (#TBD):` When one thing changes,
+  core does work in proportion to that change, not to the size of what
+  surrounds it. State that did not change, and anything derived from it, is
+  not rebuilt, copied, or logged again.
 
 ## Concepts
 
@@ -202,19 +206,25 @@ The rules that hold across areas. An area's own rules are in its file.
 
 ### Work in proportion to change
 
-`Planned (#TBD):`
+`Planned (#TBD):` `INV-6` binds every part of core. Where it bites:
 
-- When one thing changes, core does work in proportion to that change, not
-  to the size of what surrounds it. State that did not change, and anything
-  derived from it, is not rebuilt, copied, or logged again.
-- A write to one cell of the ground does work in proportion to the cells
+- **The ground.** A write to one cell does work in proportion to the cells
   written, not to the size of the map, in core and in the reference host.
-  A test holds it there by counting.
-- The three rules under [The ground](#the-ground) still hold, and no log
-  changes.
+  The three rules under [The ground](#the-ground) still hold.
   Why: the studio scrubs to any point of a log with `fold` and compares
   maps by identity, so a host that is pushed changes and keeps its own state
   would break scrubbing and forks.
+- **Globals.** A write to one key of a map-typed global logs that key, as a
+  write to an entity's field does, not the whole map.
+- **Derived values.** A derived value is worked out again only when
+  something it reads has changed.
+- **End conditions.** An end condition is evaluated again only when
+  something it reads has changed.
+- **Decisions.** A seat's awareness, memory, and predictions are worked out
+  again only for what has changed
+  ([`docs/spec/decisions.md`](docs/spec/decisions.md) "Scoring").
+- Each of these is held by a test that counts the work done, and names
+  `INV-6`.
 - [`docs/host.md`](docs/host.md) says what a host is given when the ground
   changes.
 
@@ -228,10 +238,11 @@ The rules that hold across areas. An area's own rules are in its file.
   seeds of each with the recorded matches.
 - **Dependencies of core's entry.** Four: a CEL evaluator, a JSON Schema
   checker, Immer, and a YAML parser. None touches Node.
-- **Cost of a ground write.** `Planned (#TBD):` in proportion to the cells
-  written ([Work in proportion to change](#work-in-proportion-to-change)).
-- **SRD coverage.** `Planned (#TBD):` the numbers are in
-  [`docs/spec/srd-ruleset.md`](docs/spec/srd-ruleset.md) "Coverage".
+- **Cost of a change.** `Planned (#TBD):` in proportion to what changed
+  (`INV-6`), held by tests that count.
+- **SRD coverage.** `Planned (#TBD):` every combat rule unit of the SRD 5.2
+  has a status in the ledger
+  ([`docs/spec/srd-ruleset.md`](docs/spec/srd-ruleset.md) "Coverage").
 
 ## Open questions
 
@@ -243,8 +254,3 @@ file.
   host and the cells that changed; give `SpaceMap` a shape that shares
   structure between grounds; batch the writes of one effect list; or some
   of these together.
-- **Which other cases does the principle bind?** A keyed write to a
-  map-typed global logs the whole map, which fixing would change every
-  affected `logHash`. A derived value is worked out again after every write.
-  Every end condition is evaluated after every write. Each is either made
-  a rule here or measured and accepted.
