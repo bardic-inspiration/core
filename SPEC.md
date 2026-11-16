@@ -58,7 +58,7 @@ green.
 - **`INV-5` — Host-agnostic.** Nothing reachable from `src/index.ts` imports
   Node or touches the file system; core runs unchanged in a browser or a Web
   Worker, and writes the same logs there as in Node.
-- **`INV-6` — Proportional work.** `Planned (#TBD):` When one thing changes,
+- **`INV-6` — Proportional work.** `Planned (#13):` When one thing changes,
   core does work in proportion to that change, not to the size of what
   surrounds it. State that did not change, and anything derived from it, is
   not rebuilt, copied, or logged again.
@@ -182,7 +182,7 @@ The rules that hold across areas. An area's own rules are in its file.
   same again plays out the same match.
 - A snapshot is a match at a decision as plain data; a match restored from
   one plays on as the original would have.
-- `Planned (#TBD):` A match may be run with a debug override that gives
+- `Planned (#13):` A match may be run with a debug override that gives
   the results of its rolls in place of the seeded stream. A roll made under
   it is marked in its log entry, and `replay` takes a marked roll from the
   log, so such a log replays from itself alone (`INV-3`, `INV-4`).
@@ -206,7 +206,7 @@ The rules that hold across areas. An area's own rules are in its file.
 
 ### Work in proportion to change
 
-`Planned (#TBD):` `INV-6` binds every part of core. Where it bites:
+`Planned (#13):` `INV-6` binds every part of core. Where it bites:
 
 - **The ground.** A write to one cell does work in proportion to the cells
   written, not to the size of the map, in core and in the reference host.
@@ -238,9 +238,9 @@ The rules that hold across areas. An area's own rules are in its file.
   seeds of each with the recorded matches.
 - **Dependencies of core's entry.** Four: a CEL evaluator, a JSON Schema
   checker, Immer, and a YAML parser. None touches Node.
-- **Cost of a change.** `Planned (#TBD):` in proportion to what changed
+- **Cost of a change.** `Planned (#13):` in proportion to what changed
   (`INV-6`), held by tests that count.
-- **SRD coverage.** `Planned (#TBD):` every combat rule unit of the SRD 5.2
+- **SRD coverage.** `Planned (#13):` every combat rule unit of the SRD 5.2
   has a status in the ledger
   ([`docs/spec/srd-ruleset.md`](docs/spec/srd-ruleset.md) "Coverage").
 

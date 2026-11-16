@@ -4,7 +4,7 @@ The rules of D&D 5e (SRD 5.2) as a ruleset, the document levels it needs,
 and the testing that shows the model covers them. An area of
 [`SPEC.md`](../../SPEC.md).
 
-`Planned (#TBD):` everything in this file. What `main` has is the
+`Planned (#13):` everything in this file. What `main` has is the
 [5e slice](../../rulesets/dnd-5e-2024-slice/ruleset.yaml): initiative,
 turns, grid movement, weapon attacks, opportunity attacks, saving throws,
 damage types, four conditions, and spellcasting with slots, reactions, and

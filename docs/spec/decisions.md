@@ -84,14 +84,14 @@ Every decision in a match goes through the same three stages.
 - `match.explain()` gives, for the pending decision, every candidate binding
   of every offered intent, legal or not, with each gate's result and every
   host call made. Its legal candidates are the decision's options, in order.
-- `Planned (#TBD):` **A choice can be explained.** For a pending decision
+- `Planned (#13):` **A choice can be explained.** For a pending decision
   and a behavior: each option's score, the value of each consideration that
   made it, and each goal that scaled it.
 - Explaining changes nothing in the match.
 
 ## Scoring
 
-`Planned (#TBD):`
+`Planned (#13):`
 
 Scoring is a multi-step algorithm. Four levels each supply a part of it:
 
@@ -234,7 +234,7 @@ Scoring is a multi-step algorithm. Four levels each supply a part of it:
 
 ## What scoring is held to
 
-`Planned (#TBD):`
+`Planned (#13):`
 
 - **The aim is a decision model that responds to its configuration**, not
   the one that wins most. A dull goblin plays like a dull goblin, a
@@ -255,7 +255,7 @@ Scoring is a multi-step algorithm. Four levels each supply a part of it:
 
 ## Decisions with large ranges
 
-`Planned (#TBD):`
+`Planned (#13):`
 
 - **A decision is hierarchical.** An intent whose params have a very large
   range is not listed once per binding. In hold 'em the decision's list is
@@ -279,7 +279,7 @@ Scoring is a multi-step algorithm. Four levels each supply a part of it:
 
 ## Selection
 
-`Planned (#TBD):`
+`Planned (#13):`
 
 - A behavior declares how it selects: the highest score, or a pick among the
   highest weighted by score, drawn from the seat's stream.
@@ -288,7 +288,7 @@ Scoring is a multi-step algorithm. Four levels each supply a part of it:
 
 ## Path distance
 
-`Planned (#TBD):`
+`Planned (#13):`
 
 - Path distance between two cells is a space function: the length of the
   shortest route through `neighbors`, in game units. Only a ruleset that
