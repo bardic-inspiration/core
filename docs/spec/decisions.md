@@ -128,6 +128,18 @@ Scoring is a multi-step algorithm. Four levels each supply a part of it:
 - By default a seat is aware of everything its own entities hold. A ruleset
   may make a seat unaware of some of its own values.
 
+- **Awareness is a second layer over `visible`, related but separate.**
+  `visible` is the legal gate: it bounds a seat's options, and is applied at
+  a decision before the seat's awareness is worked out again.
+- Awareness and `visible` need not agree. A seat may be aware of something
+  it cannot see, as a presence nearby; and may lose sight of something and
+  stay aware that it exists.
+- Awareness is per fact, and has an age. A seat that loses sight of a
+  hiding goblin still knows the goblin exists; what it knows of the goblin's
+  position is what it last perceived, now one turn stale.
+- A seat may act on stale awareness: shoot at where the goblin was, or
+  weigh the hiding places within reach of that square.
+
 ### Memory
 
 - Memory is the part of the log a seat perceived, filtered by its awareness
@@ -215,9 +227,8 @@ Scoring is a multi-step algorithm. Four levels each supply a part of it:
   for performance and to prevent failure; defined within those bounds by the
   ruleset; and set within the ruleset's definition per seat, from the state.
   In the 5e ruleset a seat's memory length may follow its creature's
-  Intelligence, its
-  awareness of some types of event its Perception, and the weight it gives
-  remembered actions of other creatures its Insight.
+  Intelligence, its awareness of some types of event its Perception, and the
+  weight it gives remembered actions of other creatures its Insight.
 
 ## Selection
 
@@ -250,9 +261,8 @@ Not contract. Resolve one by editing this file, then delete it here.
   weigh? Core has no notion of a turn; the flow is the ruleset's.
 - **How is "like" decided** between a remembered entity and the one being
   predicted, and how are the amount and consistency of precedent measured?
-- **How does awareness relate to `visible`?** Today a seat's options and
-  scores are worked out through its view, and reading a hidden value there
-  is an error.
+- **How is awareness's age counted**, when core has no notion of a turn,
+  and how does a stale fact differ from a memory?
 - **What is a profile**, and what does a derived one derive from?
 - **What are core's bounds**, as numbers?
 - **Is rule data that exists only for behaviors acceptable**, or does a
