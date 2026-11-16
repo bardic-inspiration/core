@@ -71,7 +71,7 @@ its own, and is checked against them.
   one the rules allowed to be built.
 - **A character outlives its match.** It can be exported from one match and
   brought into another. An export is a content document: the character and
-  what it owns, with their state as it stood.
+  what is taken with it, with their state as it stood.
 - **Whoever calls the export chooses what it takes**, and an export takes
   everything of what is chosen. Nothing in the ruleset marks what travels.
 - **A match is given its characters.** A scenario may leave places for

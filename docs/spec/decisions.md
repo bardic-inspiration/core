@@ -129,7 +129,6 @@ Scoring is a multi-step algorithm. Four levels each supply a part of it:
   Perception and Insight.
 - By default a seat is aware of everything its own entities hold. A ruleset
   may make a seat unaware of some of its own values.
-
 - **Awareness is a second layer over `visible`, related but separate.**
   `visible` is the legal gate: it bounds a seat's options, and is applied at
   a decision before the seat's awareness is worked out again.
@@ -171,9 +170,9 @@ Scoring is a multi-step algorithm. Four levels each supply a part of it:
   levels as the rest of scoring: core's mechanics, the ruleset's definition,
   the behavior's profile, and the seat's own filtering of its memory, which
   a ruleset may tie to the fields of the seat's entities.
-- A seat predicts the actions of an entity that is not its own. For one it has not
-  encountered, it applies its own profile to what its awareness shows of the
-  other at that moment.
+- A seat predicts the actions of an entity that is not its own. For one it
+  has not encountered, it applies its own profile to what its awareness
+  shows of the other at that moment.
 - As events caused by the other entity enter its memory, they weight the
   prediction.
 - A **prediction** of another entity is a weighted list of the intents it
@@ -300,7 +299,7 @@ Not contract. Resolve one by editing this file, then delete it here.
 
 - **Which measures does core expose, and what do the properties require as
   numbers?** How often is "less often", and over how many matches.
-- **What does lookahead run?** Whether an entity's own intents are applied
+- **What does lookahead run?** Whether a seat's own intents are applied
   through the rules' effects on a copy of what it is aware of, or the path
   is weighed without running any rule; and where a path ends.
 - **How are a profile's assumptions and memory's inferences written?** What
