@@ -89,18 +89,65 @@ Every decision in a match goes through the same three stages.
   made it, and each goal that scaled it.
 - Explaining changes nothing in the match.
 
-## Considerations
+## Scoring
 
 `Planned (#TBD):`
 
-- A behavior set declares **considerations**: named, typed terms. A score
-  combines considerations, each mapped through a **response curve**.
+Scoring is a multi-step algorithm. Four levels each supply a part of it:
+
+| Level | Supplies |
+|---|---|
+| Core | The mechanics of consideration and selection, and the outer bounds on awareness, memory, and prediction. |
+| Ruleset | The sources of input available, the calculations, and the outputs: how awareness, memory, and prediction are worked out for this game. |
+| Behavior | Configuration: **profiles**, preset or derived. |
+| Scenario and the current turn | The inputs themselves. |
+
+- A seat's **considerations** are assembled from three sources: its
+  awareness, its memory, and its predictions.
+- Scoring reads the three and derives a selection set by applying sets of
+  weights that the ruleset and the behavior define. A weight may read
+  anything in the state: an entity's own fields can bear on its scoring.
+- A consideration is a named, typed term, mapped through a **response
+  curve**, and shared by name between the scores, goals, and behaviors of a
+  set and of the sets merged over it.
   Why: a consideration is small enough to read, reuse, and inspect one at a
   time, where a nested expression is not.
-- A consideration is shared by name between the scores, goals, and behaviors
-  of a set, and of the sets merged over it.
 - A position is scored as a consideration over a param's value. Core has no
   notion of scoring cells; a cell is one type of param among others.
+
+### Awareness
+
+- Awareness is the part of the current state a seat can perceive.
+- The ruleset says how it is worked out. In hold 'em it is whether a card is
+  hidden or revealed; in the 5e ruleset it turns on checks such as
+  Perception and Insight.
+- By default an entity is aware of everything it holds. A ruleset may make
+  an entity unaware of some of its own values.
+
+### Memory
+
+- Memory is the part of the log a seat perceived, filtered by its awareness
+  as each event occurred: an event is perceived or not, and a perceived
+  event is remembered.
+- Memory has a **length**, a whole number of events, and a **decay**: a
+  weight on each remembered event that falls with time or with other
+  parameters the ruleset names.
+- In its simplest form an event is remembered or not. A ruleset may weight
+  it instead, by proximity or by another mechanism it defines.
+
+### Prediction
+
+- Prediction extrapolates from a seat's awareness.
+- It is an approximation of the next turn, and is not weighted by memory.
+
+### Bounds
+
+- The parameters of awareness, memory, and prediction are bounded by core,
+  for performance and to prevent failure; defined within those bounds by the
+  ruleset; and configurable within the ruleset's definition per entity. In
+  the 5e ruleset an entity's memory length may follow its Intelligence, its
+  awareness of some types of event its Perception, and the weight it gives
+  remembered actions of other creatures its Insight.
 
 ## Selection
 
@@ -123,20 +170,19 @@ Every decision in a match goes through the same three stages.
 
 Not contract. Resolve one by editing this file, then delete it here.
 
-- **How does a seat act coherently over a turn of many decisions?** A score
-  sees one option and the current state, and a turn in the 5e slice is many
-  decisions (`move` is one square), so "walk four squares, then attack"
-  cannot be weighed against "attack now". Three shapes:
-  - *In the behavior:* it settles on a destination or a target and holds it
-    across the turn's decisions. Needs seat memory that survives replay and
-    fork (`INV-3`, `INV-4`).
-  - *In the driver:* it plays its own turn forward on a copy of the match
-    and scores where it ends. Needs no memory; has to answer what a seat
-    may simulate when it cannot see hidden state or coming dice, and what a
-    copy costs.
-  - *In the ruleset:* it offers an intent that moves to a destination.
-    Cheap, but changes rules to suit the AI, as hold 'em's `strength`
-    already does.
+- **What does prediction compute, and how?** A score sees one option and
+  the current state, and a turn in the 5e slice is many decisions (`move` is
+  one square), so "walk four squares, then attack" cannot be weighed against
+  "attack now". Whether prediction runs the rules forward on a copy of the
+  match, or evaluates an estimate the ruleset declares; what it may assume
+  about dice and other seats; and what it costs.
+- **How does awareness relate to `visible`?** Today a seat's options and
+  scores are worked out through its view, and reading a hidden value there
+  is an error.
+- **Whose awareness and memory does a decision use** when a seat drives
+  several entities, or none?
+- **What is a profile**, and what does a derived one derive from?
+- **What are core's bounds**, as numbers?
 - **Is rule data that exists only for behaviors acceptable**, or does a
   behavior set get somewhere of its own to derive such values?
 - **How are considerations combined?** A product, a sum, or declared per
