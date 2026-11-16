@@ -135,6 +135,18 @@ Scoring is a multi-step algorithm. Four levels each supply a part of it:
 - In its simplest form an event is remembered or not. A ruleset may weight
   it instead, by proximity or by another mechanism it defines.
 
+### Where memory lives
+
+- The log is core's single source of truth for every event of a match. It
+  is not the source of information for a seat that is deciding: a seat
+  decides from its memory.
+- A seat's memory is state held apart from the log. A memory is not a log
+  entry, and `fold` does not give it.
+  Why: a seat does not read other entities' data when it remembers their
+  behavior, and the log holds all of it.
+- Forming a memory is deterministic, so replaying a log rebuilds every
+  seat's memory as it was, and a snapshot carries it (`INV-3`, `INV-4`).
+
 ### Prediction
 
 - Prediction extrapolates from a seat's awareness, and has the same four
