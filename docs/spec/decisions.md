@@ -230,6 +230,27 @@ Scoring is a multi-step algorithm. Four levels each supply a part of it:
   Intelligence, its awareness of some types of event its Perception, and the
   weight it gives remembered actions of other creatures its Insight.
 
+## What scoring is held to
+
+`Planned (#TBD):`
+
+- **The aim is a decision model that responds to its configuration**, not
+  the one that wins most. A dull goblin plays like a dull goblin, a
+  brilliant wizard like a brilliant wizard, a reckless barbarian like a
+  reckless barbarian.
+- The mechanics compile and run under a variety of configurations, in more
+  rulesets than the 5e one (`INV-1`).
+- Test fixtures show the pipeline works, as properties over the logs of many
+  matches:
+  - an outcome a seat holds less probable is chosen less often;
+  - profiles configured differently play differently, in the way each
+    profile's description says;
+  - a seat more aware of what an entity may do predicts it more accurately.
+- Two failures are looked for by name: information that consistently
+  outweighs everything else in a decision, and information that is ignored.
+- Core exposes measures of the pipeline for analysis, so a configuration
+  can be refined against them.
+
 ## Selection
 
 `Planned (#TBD):`
@@ -251,6 +272,8 @@ Scoring is a multi-step algorithm. Four levels each supply a part of it:
 
 Not contract. Resolve one by editing this file, then delete it here.
 
+- **Which measures does core expose, and what do the properties require as
+  numbers?** How often is "less often", and over how many matches.
 - **What does lookahead run?** Whether an entity's own intents are applied
   through the rules' effects on a copy of what it is aware of, or the path
   is weighed without running any rule; and where a path ends.
