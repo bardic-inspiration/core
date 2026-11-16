@@ -15,7 +15,7 @@ rulesets are the worked examples:
 | [checkers](../rulesets/checkers/ruleset.yaml) | A closed game: fixed seats, a forced move, a chained move. |
 | [5e slice](../rulesets/dnd-5e-2024-slice/ruleset.yaml) | Dice, derived stats, relations, reactions during resolution, spells, lasting effects. |
 | [hold 'em](../rulesets/holdem/ruleset.yaml) | Hidden information, and a scheduler that is neither rounds nor ticks. |
-| [junkyard](../rulesets/junkyard/ruleset.yaml) | An open game: ticks, state that grows and shrinks, no winner. |
+| [junkyard](../rulesets/junkyard/ruleset.yaml) | An open game: ticks, state that grows and shrinks, no winner. What an entity can do is looked up from its parts in a table, and one behavior is weighted by data the acting entity carries. |
 
 ## The model
 

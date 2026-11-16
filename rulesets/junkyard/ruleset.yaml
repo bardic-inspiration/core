@@ -1,47 +1,97 @@
-# A sandbox of self-assembling bots. A bot is a bare frame; what it can do
-# comes from the parts mounted on it. Legs let it move, arms let it strike,
-# plates protect it, cells store charge, and panels make charge. Bots take
-# parts from piles of scrap, build new bots out of their own parts, and break
-# each other back down into scrap.
+# A junkyard of parts from all over, and the machines that put themselves
+# together out of them.
+#
+# Every part is one primitive: a flow it handles (energy, motion, matter,
+# signal, heat), a role it plays in that flow (source, store, sink, ...), and
+# a rate. What a primitive is good for is looked up, not built in: the `jobs`
+# table says a motion source is legs and a signal gate is a brain. A pair the
+# table does not list is junk, until a layer gives it a job.
+#
+# A machine is a frame with parts bolted to it, and it can do what its
+# working parts add up to. Junk, tools, machinery, and robots are the same
+# thing at different stages. A machine is awake, and so gets to act, once it
+# closes a loop: an eye to sense, a brain to decide, something to act with,
+# and power. Break the loop and it is a shell again, for anyone to strip,
+# refit, or claim. Machines lay new frames and fit them out, so robots build
+# robots.
+#
+# A brain carries drives, and a seat's machines may be left to follow them
+# (behaviors/default.yaml). A player who takes a seat plays by the same rules.
 #
 # This is the open game: state grows and shrinks during play, the ruleset
 # declares no winner, and time is ticks, not turns. A scenario may still
 # declare an end, such as a census after so many ticks.
 format: 2
-ruleset: { id: junkyard, version: 0.2.0, title: Junkyard }
+ruleset: { id: junkyard, version: 0.3.0, title: Junkyard }
 
-# A layer may add kinds of part and things to do.
+# A layer may give a job to a primitive that has none, add to what falls into
+# the yard, and add things to do.
 open:
-  - enums.partType.+
+  - enums.job.+
   - tables.+
+  - tables.jobs.+
+  - tables.scrap.+
   - intents.+
   - menus.*.+
 
 uses:
   - pattern: slots
-    with: { relation: mounts, holder: bot, item: part, inverse: mountedOn, capacity: self.sockets }
-  # What a bot can do is the sum of its parts.
-  - pattern: stacking
-    with: { kind: bot, name: power, base: 0, source: "self.mounts.filter(p, p.type == 'arm').map(p, p.rating)", rule: sum }
-  - pattern: stacking
-    with: { kind: bot, name: mobility, base: 0, source: "self.mounts.filter(p, p.type == 'leg').map(p, p.rating)", rule: sum }
-  - pattern: stacking
-    with: { kind: bot, name: solar, base: 0, source: "self.mounts.filter(p, p.type == 'panel').map(p, p.rating)", rule: sum }
+    with: { relation: mounts, holder: machine, item: part, inverse: mountedOn, capacity: self.sockets }
+  - pattern: pool
+    with: { kind: machine, name: charge, max: "2 + 2 * self.does['battery']" }
   # Plates do not add up: only the thickest counts.
   - pattern: stacking
-    with: { kind: bot, name: armor, base: 0, source: "self.mounts.filter(p, p.type == 'plate').map(p, p.rating)", rule: max }
-  - pattern: pool
-    with: { kind: bot, name: hull, max: self.frame }
-  - pattern: pool
-    with: { kind: bot, name: charge, max: "2 + 2 * self.mounts.filter(p, p.type == 'cell').map(p, p.rating).sum()" }
+    with: { kind: machine, name: armor, base: 0, source: "self.working.filter(p, p.job == 'armor').map(p, p.rate)", rule: max }
 
 enums:
   ground: [open, wreck]
-  partType: [arm, leg, plate, cell, panel]
+  # What moves through a part, and what the part does to it.
+  flow: [energy, motion, matter, signal, heat]
+  role: [source, store, sink, converter, gate, sensor, conduit]
+  # What a primitive is good for. `none` is junk: a part with no use yet.
+  job: [none, generator, battery, furnace, legs, striker, armor, gripper, welder, frame, eye, brain, radiator]
+  # What a brain wants.
+  drive: [hoard, build, fight]
 
 tables:
+  # The library: the job each primitive does, by flow and role.
+  jobs:
+    energy/source: generator    # makes charge every tick
+    energy/store: battery       # holds more charge
+    energy/converter: furnace   # turns a part into charge
+    motion/source: legs         # moves the machine
+    motion/gate: striker        # aims a blow
+    motion/sink: armor          # soaks a blow
+    matter/gate: gripper        # moves parts about
+    matter/converter: welder    # makes a broken part work again
+    matter/conduit: frame       # becomes a machine when set down
+    signal/sensor: eye          # senses what is near
+    signal/gate: brain          # decides
+    heat/sink: radiator         # sheds heat
   # What falls into the yard, in the order a die picks it.
-  scrap: [arm, leg, leg, plate, cell, panel]
+  scrap:
+    - { flow: motion, role: source }
+    - { flow: motion, role: source }
+    - { flow: matter, role: gate }
+    - { flow: matter, role: gate }
+    - { flow: energy, role: source }
+    - { flow: energy, role: source }
+    - { flow: signal, role: sensor }
+    - { flow: signal, role: sensor }
+    - { flow: signal, role: gate }
+    - { flow: matter, role: conduit }
+    - { flow: matter, role: conduit }
+    - { flow: energy, role: store }
+    - { flow: energy, role: converter }
+    - { flow: motion, role: gate }
+    - { flow: motion, role: sink }
+    - { flow: matter, role: converter }
+    - { flow: heat, role: sink }
+    # Junk.
+    - { flow: heat, role: store }
+    - { flow: signal, role: conduit }
+  # How big a fallen part is, in the order a die picks it. Small parts are common.
+  sizes: [1, 1, 1, 2, 2, 3]
 
 # A cell is open ground or a wreck. Nothing stands on a wreck or sees past it.
 space:
@@ -55,28 +105,82 @@ space:
 globals:
   tick: { type: int, default: 0 }
   dropEvery: { type: int, default: 5, doc: "A part falls into the yard every this many ticks. 0 for never." }
-  swarmLimit: { type: int, default: 6, doc: The most bots one seat may run. }
+  meltAt: { type: int, default: 5, doc: A machine hotter than this burns out one of its parts. }
 
 kinds:
-  bot:
+  machine:
+    doc: A frame standing in the yard, with whatever is bolted to it. Awake, it is a robot; asleep, a shell.
     fields:
-      seat: seat
+      seat: { type: seat, doc: "Whose it is. A shell goes to whoever next bolts a part onto it or mends one on it." }
       pos: cell
-      sockets: { type: int, default: 4 }
-      frame: { type: int, default: 3, doc: How much damage the hull takes before the bot is a wreck. }
-      born: { type: int, default: 0, doc: The tick it was assembled on. }
+      gauge: { type: int, default: 1, doc: "The frame's size, from 1 to 3. It takes parts rated up to this, in two sockets more than twice as many." }
+      heat: { type: int, default: 0, doc: "Work turns charge into heat, and a tick sheds some." }
+      born: { type: int, default: 0, doc: The tick its frame was set down on. }
     derived:
+      sockets: { type: int, value: "2 + 2 * self.gauge" }
       free: { type: int, doc: Empty sockets., value: "self.sockets - self.mounts.size()" }
+      working: { type: list<part>, doc: The parts on it that are not broken., value: "self.mounts.filter(p, !p.broken)" }
+      does:
+        type: "map<job,int>"
+        each: j
+        doc: What it can do. For each job, the rates of its working parts that do it, added up.
+        value: "self.working.filter(p, p.job == j).map(p, p.rate).sum()"
+      drive:
+        type: "map<drive,int>"
+        each: d
+        doc: What it wants. Its working brains' drives, added up.
+        value: "self.working.filter(p, p.job == 'brain').map(p, p.drives[d]).sum()"
+      mobile:
+        type: bool
+        doc: Each point of legs carries four parts. A machine heavier than that stays where it is.
+        value: "self.does['legs'] > 0 && 4 * self.does['legs'] >= self.mounts.size()"
+      sight: { type: int, doc: How far its eyes reach., value: "6 * self.does['eye']" }
+      seesPiles:
+        type: list<pile>
+        value: "all.pile.filter(p, distance(self.pos, p.pos) <= self.sight && lineOfSight(self.pos, p.pos))"
+      seesMachines:
+        type: list<machine>
+        value: "all.machine.filter(m, m != self && distance(self.pos, m.pos) <= self.sight && lineOfSight(self.pos, m.pos))"
+      wired:
+        type: bool
+        doc: It closes the loop. It can sense, decide, and act.
+        value: >-
+          self.does['eye'] > 0 && self.does['brain'] > 0
+            && (self.mobile || self.does['gripper'] > 0 || self.does['striker'] > 0 || self.does['welder'] > 0 || self.does['furnace'] > 0)
+      powered: { type: bool, value: "self.charge > 0 || self.does['generator'] > 0" }
+      awake: { type: bool, doc: A machine that is wired and powered acts every tick., value: "self.wired && self.powered" }
+      reach:
+        type: list<part>
+        doc: >-
+          The parts it may handle: those lying on its own square or a
+          neighbouring one, and those on a machine there that is its own, its
+          seat's, or not awake.
+        value: >-
+          all.part.filter(p, p.heldIn.exists(h, distance(h.pos, self.pos) <= 1)
+            || p.mountedOn.exists(m, distance(m.pos, self.pos) <= 1 && (m.seat == self.seat || !m.awake)))
     checks:
-      - { that: "inBounds(self.pos)", message: a bot stands in the yard }
-      - { that: "all.bot.filter(b, b.pos == self.pos).size() == 1", message: two bots cannot share a square }
+      - { that: "inBounds(self.pos)", message: a machine stands in the yard }
+      - { that: "all.machine.filter(m, m.pos == self.pos).size() == 1", message: two machines cannot share a square }
+      - { that: "self.gauge >= 1 && self.gauge <= 3", message: a frame is gauged from 1 to 3 }
+      - { that: "self.mounts.all(p, p.rate <= self.gauge)", message: a part rated above the frame's gauge does not fit }
+      - { that: "self.heat >= 0", message: heat cannot be less than none }
 
   part:
+    doc: One primitive. A flow, a role in it, and how much.
     fields:
-      type: partType
-      rating: { type: int, default: 1 }
+      flow: flow
+      role: role
+      rate: { type: int, default: 1 }
+      broken: { type: bool, default: false, doc: A broken part does nothing until it is mended. }
+      drives: { type: "map<drive,int>", default: { hoard: 0, build: 0, fight: 0 }, doc: "How hard it wants each thing, from 0 to 3. Only a brain's are read." }
+    derived:
+      job:
+        type: job
+        doc: What it is good for, from the library.
+        value: "(self.flow + '/' + self.role) in tables.jobs ? tables.jobs[self.flow + '/' + self.role] : 'none'"
     checks:
-      - { that: "self.rating >= 1 && self.rating <= 3", message: a part is rated from 1 to 3 }
+      - { that: "self.rate >= 1 && self.rate <= 3", message: a part is rated from 1 to 3 }
+      - { that: "self.drives.all(d, self.drives[d] >= 0 && self.drives[d] <= 3)", message: a drive runs from 0 to 3 }
       - { that: "self.mountedOn.size() + self.heldIn.size() <= 1", message: a part is in one place at a time }
 
   pile:
@@ -90,45 +194,69 @@ relations:
   holds: { from: pile, to: part, inverse: heldIn }
 
 signals:
-  bot.built: { params: { parent: bot, child: bot } }
-  bot.wrecked: { params: { bot: bot } }
+  machine.built: { params: { by: machine, machine: machine }, doc: A frame was set down. It is a shell until it is fitted out. }
+  machine.woke: { params: { machine: machine }, doc: A shell closed its loop. }
+  machine.collapsed: { params: { machine: machine } }
+  part.broke: { params: { part: part, on: machine } }
 
 reactions:
-  - on: hull.empty
-    doc: A wrecked bot falls apart where it stands. Its parts become a pile.
+  - on: machine.collapsed
+    doc: A collapsed machine falls apart where it stands. Its frame and its parts become a pile.
     do:
-      - emit: bot.wrecked
-        with: { bot: target }
-      - if: "target.mounts.size() > 0"
-        then:
-          - create: { kind: pile, as: wreck, fields: { pos: target.pos } }
-          - each: part
-            in: target.mounts
-            do:
-              - unlink: { rel: mounts, from: target, to: part }
-              - link: { rel: holds, from: wreck, to: part }
-      - destroy: target
+      - create: { kind: part, as: frame, fields: { flow: "'matter'", role: "'conduit'", rate: machine.gauge } }
+      - call: dump
+        with: { part: frame, spot: machine.pos }
+      - each: part
+        in: machine.mounts
+        do:
+          - unlink: { rel: mounts, from: machine, to: part }
+          - call: dump
+            with: { part: part, spot: machine.pos }
+      - destroy: machine
 
-intents:
-  move:
-    doc: Step to a neighbouring square. Needs legs, and a point of charge.
-    params:
-      bot: bot
-      to: { type: cell, in: "neighbors(bot.pos)" }
-    gate:
-      - "bot.mobility > 0 && bot.charge >= 1"
-      - "!all.bot.exists(b, b.pos == to)"
-    effects:
+procedures:
+  work:
+    doc: Spends charge on an act. The charge turns to heat.
+    params: { bot: machine, cost: int }
+    do:
       - emit: charge.lose
-        with: { target: bot, amount: 1 }
-      - set: { bot.pos: to }
+        with: { target: bot, amount: cost }
+      - call: warm
+        with: { bot: bot, amount: cost }
 
-  salvage:
-    doc: Take a part from a pile here or on a neighbouring square, and mount it.
-    params:
-      bot: bot
-      part: { type: part, in: "all.part.filter(x, bot.free > 0 && x.heldIn.exists(p, distance(p.pos, bot.pos) <= 1))" }
-    effects:
+  warm:
+    doc: Heats a machine. Run hotter than `meltAt`, it burns out one working part, picked by a die, and the heat goes with it.
+    params: { bot: machine, amount: int }
+    do:
+      - set: { bot.heat: "bot.heat + amount" }
+      - if: "bot.heat > game.meltAt && bot.working.size() > 0"
+        then:
+          - roll: { as: which, d: "bot.working.size()" }
+          - call: breakPart
+            with: { part: "bot.working[which - 1]", on: bot }
+          - set: { bot.heat: 0 }
+
+  breakPart:
+    params: { part: part, on: machine }
+    do:
+      - set: { part.broken: true }
+      - emit: part.broke
+        with: { part: part, on: on }
+      - call: settle
+        with: { bot: on }
+
+  settle:
+    doc: A machine that has lost a battery cannot hold what the battery held.
+    params: { bot: machine }
+    do:
+      - if: "bot.charge > bot.chargeMax"
+        then:
+          - set: { bot.charge: bot.chargeMax }
+
+  loosen:
+    doc: Takes a part off whatever holds it. A pile left empty is gone.
+    params: { part: part }
+    do:
       - each: pile
         in: part.heldIn
         do:
@@ -136,76 +264,206 @@ intents:
           - if: "pile.holds.size() == 0"
             then:
               - destroy: pile
-      - link: { rel: mounts, from: bot, to: part }
+      - each: holder
+        in: part.mountedOn
+        do:
+          - unlink: { rel: mounts, from: holder, to: part }
+          - call: settle
+            with: { bot: holder }
 
-  strike:
-    doc: Hit a neighbouring bot of another seat. Needs arms, and two points of charge. Armor makes it harder to hurt.
-    params:
-      bot: bot
-      target: { type: bot, in: "all.bot.filter(b, bot.power > 0 && b.seat != bot.seat && distance(b.pos, bot.pos) <= 1)" }
-    gate: "bot.charge >= 2"
-    effects:
-      - emit: charge.lose
-        with: { target: bot, amount: 2 }
-      - roll: { as: swing, d: 6 }
-      - if: "swing + bot.power > 3 + target.armor"
+  dump:
+    doc: Leaves a loose part on the ground, on the pile lying there or a new one.
+    params: { part: part, spot: cell }
+    do:
+      - if: "all.pile.exists(p, p.pos == spot)"
         then:
-          - emit: hull.lose
-            with: { target: target, amount: "max(1, bot.power - target.armor)" }
+          - link: { rel: holds, from: "all.pile.filter(p, p.pos == spot).first()", to: part }
+        else:
+          - create: { kind: pile, as: heap, fields: { pos: spot } }
+          - link: { rel: holds, from: heap, to: part }
 
-  assemble:
-    doc: >-
-      Build a new bot on an empty neighbouring square, out of one of this
-      bot's own parts. Takes two points of charge, and the builder keeps at
-      least two parts.
+intents:
+  move:
+    doc: Step to a neighbouring square. Needs legs enough to carry it, and a point of charge.
     params:
-      bot: bot
-      part: { type: part, in: "bot.mounts.filter(p, bot.mounts.size() >= 3 && bot.charge >= 2)" }
+      bot: machine
       to: { type: cell, in: "neighbors(bot.pos)" }
     gate:
-      - "all.bot.filter(b, b.seat == bot.seat).size() < game.swarmLimit"
-      - "!all.bot.exists(b, b.pos == to)"
+      - "bot.mobile && bot.charge >= 1"
+      - "!all.machine.exists(m, m.pos == to)"
     effects:
-      - emit: charge.lose
-        with: { target: bot, amount: 2 }
-      - unlink: { rel: mounts, from: bot, to: part }
-      # Giving away a cell shrinks what the builder can hold.
-      - set: { bot.charge: "min(bot.charge, bot.chargeMax)" }
-      - create: { kind: bot, as: child, fields: { seat: bot.seat, pos: to, born: game.tick } }
-      - link: { rel: mounts, from: child, to: part }
-      - emit: bot.built
-        with: { parent: bot, child: child }
+      - set: { bot.pos: to }
+      - call: work
+        with: { bot: bot, cost: 1 }
+
+  attach:
+    doc: >-
+      Bolt a part within reach onto a machine within reach: itself, one of
+      its seat's, or one that is not awake. This is how a machine takes
+      scrap, strips a shell, and fits one out. Needs a gripper, and a point of
+      charge. The part must fit the frame's gauge. A shell goes to the seat
+      of whoever bolts a part onto it.
+    params:
+      bot: machine
+      part: { type: part, in: "bot.reach.filter(p, bot.does['gripper'] > 0 && bot.charge >= 1)" }
+      onto: { type: machine, in: "all.machine.filter(m, distance(m.pos, bot.pos) <= 1 && (m.seat == bot.seat || !m.awake))" }
+    gate:
+      - "onto.free > 0"
+      - "part.rate <= onto.gauge"
+      - "!part.mountedOn.exists(m, m == onto)"
+    effects:
+      - let: { asleep: "!onto.awake" }
+      - call: loosen
+        with: { part: part }
+      - link: { rel: mounts, from: onto, to: part }
+      - if: "asleep && onto.seat != bot.seat"
+        then:
+          - set: { onto.seat: bot.seat }
+      - if: "asleep && onto.awake"
+        then:
+          - emit: machine.woke
+            with: { machine: onto }
+      - call: work
+        with: { bot: bot, cost: 1 }
+
+  drop:
+    doc: Unbolt one of its own parts and leave it on the ground where it stands. Needs a gripper.
+    params:
+      bot: machine
+      part: { type: part, in: "bot.mounts.filter(p, bot.does['gripper'] > 0)" }
+    effects:
+      - call: loosen
+        with: { part: part }
+      - call: dump
+        with: { part: part, spot: bot.pos }
+
+  lay:
+    doc: >-
+      Set a frame within reach down on an empty neighbouring square. It
+      stands there as a new machine of the frame's gauge: a shell, until it
+      is fitted out. Needs a gripper, and two points of charge.
+    params:
+      bot: machine
+      frame: { type: part, in: "bot.reach.filter(p, p.job == 'frame' && !p.broken && bot.does['gripper'] > 0 && bot.charge >= 2)" }
+      to: { type: cell, in: "neighbors(bot.pos)" }
+    gate: "!all.machine.exists(m, m.pos == to)"
+    effects:
+      - call: loosen
+        with: { part: frame }
+      - create: { kind: machine, as: shell, fields: { seat: bot.seat, pos: to, gauge: frame.rate, born: game.tick } }
+      - destroy: frame
+      - emit: machine.built
+        with: { by: bot, machine: shell }
+      - call: work
+        with: { bot: bot, cost: 2 }
+
+  mend:
+    doc: Make a broken part within reach work again. Needs a welder, and two points of charge. A shell goes to the seat of whoever mends a part on it.
+    params:
+      bot: machine
+      part: { type: part, in: "bot.reach.filter(p, p.broken && bot.does['welder'] > 0 && bot.charge >= 2)" }
+    effects:
+      - let: { asleep: "part.mountedOn.exists(m, !m.awake)" }
+      - set: { part.broken: false }
+      - each: holder
+        in: "part.mountedOn.filter(m, asleep)"
+        do:
+          - if: "holder.seat != bot.seat"
+            then:
+              - set: { holder.seat: bot.seat }
+          - if: "holder.awake"
+            then:
+              - emit: machine.woke
+                with: { machine: holder }
+      - call: work
+        with: { bot: bot, cost: 2 }
+
+  burn:
+    doc: Feed a part within reach to the furnace. The part is gone, and gives two points of charge for each point of its rate. Burning is hot.
+    params:
+      bot: machine
+      part: { type: part, in: "bot.reach.filter(p, bot.does['furnace'] > 0)" }
+    effects:
+      - let: { fuel: "2 * part.rate" }
+      - call: loosen
+        with: { part: part }
+      - destroy: part
+      - emit: charge.gain
+        with: { target: bot, amount: fuel }
+      - call: warm
+        with: { bot: bot, amount: 2 }
+
+  strike:
+    doc: >-
+      Hit a neighbouring machine of another seat. Needs a striker, and two
+      points of charge. Armor makes the blow harder to land. A blow that
+      lands breaks one working part, picked by a die. A machine with nothing
+      left to break collapses.
+    params:
+      bot: machine
+      target: { type: machine, in: "all.machine.filter(m, bot.does['striker'] > 0 && m.seat != bot.seat && distance(m.pos, bot.pos) <= 1)" }
+    gate: "bot.charge >= 2"
+    effects:
+      - roll: { as: swing, d: 6 }
+      - if: "swing + bot.does['striker'] > 4 + target.armor"
+        then:
+          - if: "target.working.size() > 0"
+            then:
+              - roll: { as: which, d: "target.working.size()" }
+              - call: breakPart
+                with: { part: "target.working[which - 1]", on: target }
+            else:
+              - emit: machine.collapsed
+                with: { machine: target }
+      - call: work
+        with: { bot: bot, cost: 2 }
 
   idle:
-    params: { bot: bot }
+    params: { bot: machine }
     effects: []
 
 menus:
-  act: [salvage, assemble, strike, move, idle]
+  act: [attach, lay, mend, burn, strike, drop, move, idle]
 
 flow:
   - while: true
     do:
       - set: { game.tick: "game.tick + 1" }
-      # Scrap falls somewhere in the yard.
+      # Scrap falls somewhere in the yard. A fallen brain wants what the dice say.
       - if: "game.dropEvery > 0 && game.tick % game.dropEvery == 0"
         then:
           - roll: { as: x, d: space.width }
           - roll: { as: y, d: space.height }
           - roll: { as: what, d: "tables.scrap.size()" }
-          - roll: { as: rating, d: 3 }
+          - roll: { as: size, d: "tables.sizes.size()" }
           - if: "inBounds(cell(x - 1, y - 1))"
             then:
-              - create: { kind: pile, as: heap, fields: { pos: "cell(x - 1, y - 1)" } }
-              - create: { kind: part, as: scrap, fields: { type: "tables.scrap[what - 1]", rating: rating } }
-              - link: { rel: holds, from: heap, to: scrap }
-      # Every bot acts once a tick, the quickest first. A bot built this tick waits for the next.
+              - create:
+                  kind: part
+                  as: scrap
+                  fields: { flow: "tables.scrap[what - 1]['flow']", role: "tables.scrap[what - 1]['role']", rate: "tables.sizes[size - 1]" }
+              - if: "scrap.job == 'brain'"
+                then:
+                  - roll: { as: hoard, d: 4 }
+                  - roll: { as: build, d: 4 }
+                  - roll: { as: fight, d: 4 }
+                  - set: { scrap.drives.hoard: "hoard - 1", scrap.drives.build: "build - 1", scrap.drives.fight: "fight - 1" }
+              - call: dump
+                with: { part: scrap, spot: "cell(x - 1, y - 1)" }
+      # Every machine makes charge and sheds heat, and the ones awake act once, the quickest first.
       - each: bot
-        in: "sortBy(all.bot, all.bot.map(b, -b.mobility))"
+        in: "sortBy(all.machine, all.machine.map(m, -m.does['legs']))"
         do:
-          - emit: charge.gain
-            with: { target: bot, amount: "1 + bot.solar" }
-          - prompt:
-              seat: bot.seat
-              with: { bot: bot }
-              offer: [act]
+          - if: "bot.does['generator'] > 0 && bot.charge < bot.chargeMax"
+            then:
+              - emit: charge.gain
+                with: { target: bot, amount: "bot.does['generator']" }
+          - if: "bot.heat > 0"
+            then:
+              - set: { bot.heat: "max(0, bot.heat - 1 - bot.does['radiator'])" }
+          - if: "bot.awake"
+            then:
+              - prompt:
+                  seat: bot.seat
+                  with: { bot: bot }
+                  offer: [act]
