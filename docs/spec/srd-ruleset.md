@@ -63,6 +63,8 @@ its own, and is checked against them.
 - **A character outlives its match.** It can be exported from one match and
   brought into another. An export is a content document: the character and
   what it owns, with their state as it stood.
+- **Whoever calls the export chooses what it takes**, and an export takes
+  everything of what is chosen. Nothing in the ruleset marks what travels.
 - **A match is given its characters.** A scenario may leave places for
   characters that the run fills, as it binds seats. They enter through
   setup, so the log still rebuilds the match by itself (`INV-4`).
@@ -142,11 +144,8 @@ Five layers, each catching what the others cannot.
 
 Not contract. Resolve one by editing this file, then delete it here.
 
-- **What does a character own?** An export takes the character and what
-  belongs to it (its equipment) and leaves what does not (a spell another
-  creature is concentrating on). Whether a relation says which it is.
-- **What of a character is the match's and not its own?** Position,
-  initiative, and a turn's budgets do not travel.
+- **What does an import do with what does not fit the new match**: a
+  position on another map, a link to an entity that is not there?
 - **Can a character cross ruleset versions**, or sets of extensions?
 - **How is a template distinguished from an instance**, and which content is
   copied into a match (a creature) and which is shared (a spell)?
