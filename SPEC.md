@@ -74,15 +74,15 @@ model".
 | Kit, pattern | The kit holds named templates; a ruleset or extension uses a pattern with arguments, and it expands into ordinary declarations. |
 | Registry | A compiled ruleset with its extensions: every declaration resolved, every expression type-checked, every address listed. |
 | Entity | An instance of a kind, with an id. |
-| Agent | `Planned (#13):` An entity that decides: a player, a bot, a creature, a unit. It holds knowledge, and exactly one seat owns it. |
-| Prop | `Planned (#13):` An entity that never decides and holds no knowledge: a card, a chip, a boulder. |
+| Agent | `Planned (#19):` An entity that decides: a player, a bot, a creature, a unit. It holds knowledge, and exactly one seat owns it. |
+| Prop | `Planned (#19):` An entity that never decides and holds no knowledge: a card, a chip, a boulder. |
 | State | Entities, the links between them, globals, the ground, the position of the rules' dice, and the seats' streams. |
 | Space | A ruleset's declaration of what a map can be, and the two rules the host respects on it. |
 | Map | One playing environment for a ruleset: a document of its own, never changed by play. |
 | Ground | A map with what a match has written to its mutable layers laid over it. |
 | Host | The engine's geometry: six pure functions of one map. |
 | Scenario | Who is seated, which entities are in play and where they stand, on which map, and when the match ends. |
-| Seat | A place at the match that makes decisions. A referee seat may also author changes and rule that an intent happens. `Planned (#13):` A seat owns any number of agents. |
+| Seat | A place at the match that makes decisions. A referee seat may also author changes and rule that an intent happens. `Planned (#19):` A seat owns any number of agents. |
 | Driver | What fills a seat: it is given a decision and returns one of its options. |
 | Behavior, behavior set | A behavior scores a seat's options; a behavior set is a document of behaviors compiled against a registry. |
 | Prompt | The effect that asks a seat to choose among offered intents. |
@@ -301,7 +301,7 @@ The rules that hold across areas. A surface's own rules are in its file.
   a `roll` of fewer than zero dice or of a die with no sides, a `done`
   outside any prompt, and a flow that runs a million steps without reaching
   a decision.
-- `Planned (#13):` An intent chosen at a prompt can return a value to the
+- `Planned (#19):` An intent chosen at a prompt can return a value to the
   effects that prompted it, and a reaction to what emitted its signal.
   Why: without it, everything a reaction may change in flight is an entity
   made and destroyed for the purpose, at two log entries each.
@@ -330,7 +330,7 @@ and how scripted seats choose, is in
 - A referee seat sees everything.
 - The log is not filtered by seat, and the seats' streams are in every
   seat's view.
-- `Planned (#13):` What is visible is worked out for an agent, not for a
+- `Planned (#19):` What is visible is worked out for an agent, not for a
   seat, and it is that agent's awareness: the part of the current state it
   can perceive. A decision's options and scores are worked out through the
   deciding agent's view. A seat's own view is everything any of its agents
@@ -372,13 +372,13 @@ and how scripted seats choose, is in
 - A record is worked out from a log alone, and only from the log of a match
   that has ended. It holds nothing that differs between two runs of the same
   seed.
-- `Planned (#13):` The log's first entry names what wrote it: core's
+- `Planned (#19):` The log's first entry names what wrote it: core's
   version, the ruleset's id and version, and a hash of the map. `replay`
   refuses a log that names anything other than what it is given, before it
   runs a rule.
   Why: a log from other rules otherwise fails at the first entry that
   differs, which says nothing of the cause.
-- `Planned (#13):` A match may be run with a debug override that gives
+- `Planned (#19):` A match may be run with a debug override that gives
   the results of its rolls in place of the seeded stream. A roll made under
   it is marked in its log entry, and `replay` takes a marked roll from the
   log, so such a log replays from itself alone (`INV-3`, `INV-4`).
@@ -398,7 +398,7 @@ and how scripted seats choose, is in
 
 ### Work in proportion to change
 
-`Planned (#13):` When one thing changes, core aims to do work in proportion
+`Planned (#19):` When one thing changes, core aims to do work in proportion
 to that change, not to the size of what surrounds it. State that did not
 change, and anything derived from it, is not rebuilt, copied, or logged
 again. This is the goal optimization is held to, not an invariant: it binds
@@ -459,10 +459,10 @@ What core does not do today.
   for the worker that runs core.
 - **Bounds.** A match takes at most `limits.maxDecisions` decisions, and the
   flow at most a million steps between two decisions.
-- **Cost of a change.** `Planned (#13):` in proportion to what changed, for
+- **Cost of a change.** `Planned (#19):` in proportion to what changed, for
   the cases under [Work in proportion to change](#work-in-proportion-to-change),
   held by tests that count.
-- **SRD coverage.** `Planned (#13):` every combat rule unit of the SRD 5.2
+- **SRD coverage.** `Planned (#19):` every combat rule unit of the SRD 5.2
   has a status in the ledger
   ([`docs/spec/srd-ruleset.md`](docs/spec/srd-ruleset.md) "Coverage").
 

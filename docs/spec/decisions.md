@@ -85,14 +85,14 @@ Every decision in a match goes through the same three stages.
 - `match.explain()` gives, for the pending decision, every candidate binding
   of every offered intent, legal or not, with each gate's result and every
   host call made. Its legal candidates are the decision's options, in order.
-- `Planned (#13):` **A choice can be explained.** For a pending decision
+- `Planned (#19):` **A choice can be explained.** For a pending decision
   and a behavior: each option's score, the value of each consideration that
   made it, and each goal that scaled it.
 - Explaining changes nothing in the match.
 
 ## Scoring
 
-`Planned (#13):`
+`Planned (#19):`
 
 Scoring is a multi-step algorithm. Four levels each supply a part of it:
 
@@ -242,7 +242,7 @@ Scoring is a multi-step algorithm. Four levels each supply a part of it:
 
 ## What scoring is held to
 
-`Planned (#13):`
+`Planned (#19):`
 
 - **The aim is a decision model that responds to its configuration**, not
   the one that wins most. A dull goblin plays like a dull goblin, a
@@ -263,7 +263,7 @@ Scoring is a multi-step algorithm. Four levels each supply a part of it:
 
 ## Decisions with large ranges
 
-`Planned (#13):`
+`Planned (#19):`
 
 - **A decision is hierarchical.** An intent whose params have a very large
   range is not listed once per binding. In hold 'em the decision's list is
@@ -292,7 +292,7 @@ Scoring is a multi-step algorithm. Four levels each supply a part of it:
 
 ## Selection
 
-`Planned (#13):`
+`Planned (#19):`
 
 - A behavior declares how it selects: the highest score, or a pick among the
   highest weighted by score, drawn from the seat's stream.
@@ -301,7 +301,7 @@ Scoring is a multi-step algorithm. Four levels each supply a part of it:
 
 ## Path distance
 
-`Planned (#13):`
+`Planned (#19):`
 
 - Path distance between two cells is the least cost of a route between
   them, and the ruleset says what a route costs. Core finds the route; it
