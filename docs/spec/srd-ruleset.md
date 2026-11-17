@@ -4,7 +4,7 @@ The rules of D&D 5e (SRD 5.2) as a ruleset, the document levels it needs,
 and the testing that shows the model covers them. An area of
 [`SPEC.md`](../../SPEC.md).
 
-`Planned (#13):` everything in this file. What `main` has is the
+`Planned (#19):` everything in this file. What `main` has is the
 [5e slice](../../rulesets/dnd-5e-2024-slice/ruleset.yaml): initiative,
 turns, grid movement, weapon attacks, opportunity attacks, saving throws,
 damage types, four conditions, and spellcasting with slots, reactions, and
@@ -80,22 +80,26 @@ its own, and is checked against them.
 - **The scenario's place for a character overrides what the export
   carried.** A position, or anything else the place gives, replaces the
   exported value.
-- **A link to an entity that is not in the match is not made.** The import
-  reports it as a warning and setup goes on.
-  Why: an export takes everything, so it carries links that meant something
-  only in the match it left; refusing the character for them would make
-  every export unusable until exports are narrowed.
-- **An imported character is held to the kind's checks, not to its
-  history.** The checks on a character are strong enough to refuse one the
-  intents could not have built (`INV-2`).
-  Why: the log that proved each choice legal does not travel with the
-  character, and requiring it would tie every character to every match it
-  has been through.
+- **An export carries the choices that built the character**, in order,
+  beside its state as it stood. An import makes those choices again through
+  the rules during setup, then lays the state over the result. A choice the
+  rules do not allow refuses the character (`INV-2`).
+  Why: a kind's checks cannot tell every character the intents could not
+  have built, since what was legal depended on the order of the choices.
+  The choices are a small part of the logs the character has been through,
+  so it is not tied to those matches.
 - **Every character built by play passes the checks.**
 - **A choice of several is made one at a time**
   ([`decisions.md`](decisions.md) "Decisions with large ranges"). The
   ruleset may also offer presets, for configuring a class and for preparing
   spells, that make many such choices at once.
+
+## Modules
+
+- **The ruleset is written as modules**, not as one document.
+  Why: twelve classes to level 20 in one file, each free to reach into any
+  rule, cannot be read, tested, or changed a part at a time.
+- How modules are divided and what one may depend on is an open question.
 
 ## Monsters
 
@@ -171,11 +175,24 @@ Not contract. Resolve one by editing this file, then delete it here.
   be modelled: the seams, resting, a spell with uses in and out of a fight.
 - **Which noncombat examples are enough**, and does the ledger list the
   noncombat chapters at all?
-- **Where is an import's warning reported?** Core refuses or accepts today;
-  it has no warnings.
+- **What becomes of an exported link to an entity that is not in the
+  match?** The character is refused (`INV-2`), or an export is narrowed so
+  that it carries no such link.
 - **How is time kept outside combat**, so that a duration of an hour and a
   rest mean something without a scheduler?
 - **What is the ruleset's id** once it is no longer a slice?
+- **How is the ruleset divided into modules?** A candidate: layers in order
+  of dependency (the mechanics every rule shares, such as the d20 test,
+  damage, conditions, and the action economy; then combat, magic,
+  equipment, and character building; then one module for each class, and
+  the monster parts). Each module declares what it depends on, a class
+  never depends on another class, and the compiler refuses an undeclared
+  or circular dependency. A class feature is only ever a reaction to a
+  signal a lower layer emits, so that set of signals is the interface, and
+  no module changes another's procedure. How a module differs from an
+  extension, and whether the ledger's units follow the modules.
+- **Does a diagonal step alternate between 5 and 10 feet?** Whether the
+  SRD 5.2 gives that rule or counts every square as 5 feet.
 - **Is content conformance checked against ttrpg-library**, or only against
   numbers written into the content itself?
 - **Which format changes do the hard cases need?** Each is unknown until it
