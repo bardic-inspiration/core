@@ -9,13 +9,15 @@ git (`git log -- SPEC.md`), not in this file. How to write and use it:
 [`docs/spec-driven-development.md`](docs/spec-driven-development.md).
 
 `SPEC.md` holds the purpose, the invariants, the concepts, and the rules
-that cross every area. Three surfaces are specified in files of their own,
-which are part of the spec and are not copied here:
+that cross every area. Each area is specified in a file of its own, which
+is part of the spec and is not copied here:
 
 | Read | For |
 |---|---|
 | [`docs/format.md`](docs/format.md) | The format: how a ruleset, extension, behavior set, map, and scenario are written, and the log's entries. |
 | [`docs/host.md`](docs/host.md) | The space host contract, and the API an engine drives a match with. |
+| [`docs/spec/decisions.md`](docs/spec/decisions.md) | How a seat's decision is asked for, chosen, and recorded, and how scripted seats choose. |
+| [`docs/spec/srd-ruleset.md`](docs/spec/srd-ruleset.md) | The SRD 5.2 ruleset: the document hierarchy, content, characters, monsters, the coverage ledger, and how it is tested. |
 | [`data/README.md`](data/README.md) | The recorded matches, and what a record holds. |
 
 ## Purpose & non-goals
@@ -34,6 +36,9 @@ headless simulation, agents) and for the authors of rulesets.
 - The content library and the translator from it. Both are separate
   projects; core only defines what the translator writes into.
 - Code in a ruleset. When the format can't express a rule, the format grows.
+- A game AI library as a dependency.
+  Why: those surveyed take decision logic as code and keep their own agent
+  state and randomness, against `INV-1`, `INV-3`, and `INV-5`.
 
 ## Invariants
 
@@ -54,6 +59,10 @@ green.
 - **`INV-5` — Host-agnostic.** Nothing reachable from `src/index.ts` imports
   Node or touches the file system; core runs unchanged in a browser or a Web
   Worker, and writes the same logs there as in Node.
+- **`INV-6` — Proportional work.** `Planned (#13):` When one thing changes,
+  core does work in proportion to that change, not to the size of what
+  surrounds it. State that did not change, and anything derived from it, is
+  not rebuilt, copied, or logged again.
 
 ## Concepts
 
@@ -130,6 +139,122 @@ All but the commands are versioned
 
 Documents are passed to the API parsed, as plain data; core reads no file.
 
+### Point spaces
+
+**Planned ([#16](https://github.com/bardic-inspiration/core/issues/16)):**
+this whole section.
+
+A space need not have coordinates. With `grid: points` a map is a counted set
+of cells, and how far apart two cells are is the engine's to say. It is the
+space for an environment whose geometry is not a grid: passages of text laid
+out by meaning, the nodes of a network. Everything a square grid's space has
+that does not come from the grid works the same: `layers`, `mutable`,
+`blocksMove`, `checks`, `places`, a standard `map`, map documents, and a
+scenario's `map` or inline `space`.
+
+Why: an engine with such an environment otherwise presents it as a grid `n`
+wide and 1 high and answers the grid's host contract with something else. A
+separate concept beside maps would repeat layers, the ground, and the map
+document for the sake of one difference, the address of a cell.
+
+#### The format
+
+```yaml
+space:
+  grid: points
+  nearest: 8                    # how many cells `neighbors` gives
+  size: { min: 5, max: 5000 }   # how many cells a map may have; either end optional
+  layers:
+    source: { type: int, default: 0 }
+    dealt: { type: bool, default: false, mutable: true }
+  blocksMove: "cell.dealt"
+```
+
+```yaml
+format: 2
+map: { id: shelf }
+ruleset: { id: hand, version: 0.1.0 }
+count: 3060
+cells:
+  - { at: 0, source: 2 }
+places:
+  start: { at: 12 }
+```
+
+- A cell is one index, from 0 to `count - 1`. In an expression it is
+  `cell(i)`, and `c.index` is its index; two cells compare with `==`. In
+  plain data (state, the log, a host call) it is `{ index }`. A scenario
+  gives a `cell` field as an index or as the name of a place.
+- `space.count` is the number of cells.
+- A place is one cell, `{ at: index }`.
+- A `ground` entry's `at`, and a referee's, is the index.
+- Refused at compile time in a point space (`INV-2`): `adjacency`, `corners`,
+  `unit`, `increment`, `width`, `height`, and `blocksSight` in `space`;
+  `cell(x, y)`, `.x`, `.y`, `.offset`, `.mid`, `lineOfSight`, `space.width`,
+  `space.height`, and `space.unit` in an expression; `neighbors` when the
+  space declares no `nearest`. In a square grid, `cell(i)`, `.index`,
+  `space.count`, and `nearest` are refused the same way.
+- Refused by `loadMap`: `rows`, `legend`, `width`, `height`, a place with a
+  `size`, a missing `count` or one outside `size`, and an index off the map
+  or given twice.
+
+#### The metric
+
+The engine answers one question about a point space, where a grid's host
+answers six:
+
+```ts
+type Metric = (a: number, b: number) => number;   // two indexes on the map
+const scenario = loadScenario(registry, doc, { maps, metric: (map) => myMetric(map) });
+```
+
+- The answer is a whole number, 0 or more, in units of the engine's
+  choosing. `metric(a, a)` is 0, and `metric(a, b)` equals `metric(b, a)`.
+- It is pure: the same map and indexes give the same answer every time.
+- It does not depend on the ground. The factory is called once, with the
+  starting map, and never again when play writes a cell.
+- Core asks only about indexes on the map. An answer that is not a whole
+  number of 0 or more stops the match with an error.
+- Giving `metric` for a space that is not `points`, or `host` for one that
+  is, is refused.
+
+Core answers every space function of an expression from the metric and the
+ground as it stands:
+
+| Function | Answers |
+|---|---|
+| `distance(a, b)` | The metric's answer. |
+| `inBounds(c)` | `c` is on the map and does not block movement. |
+| `cellAt(c)` | The cell's layer values. |
+| `cellsWithin(c, range)` | Every cell for which `inBounds` holds and `distance(c, other) <= range`, `c` itself included when it is in bounds. |
+| `neighbors(c)` | The `nearest` cells nearest to `c` for which `inBounds` holds, without `c` itself; fewer when fewer are in bounds. |
+
+`cellsWithin` and `neighbors` answer nearest first, and cells equally near
+in ascending index. `distance`, `cellAt`, `cellsWithin`, and `neighbors` of a
+cell off the map are an error; `inBounds` is false there.
+
+Why: a set of points has no row order, and the nearest-first order is the
+one a ruleset would otherwise sort into. The order reaches the log through a
+seat's options, so it is part of the contract (`INV-3`).
+
+Why: the metric is all of the geometry. Blocking and layers are core's
+already, so a host that answered the other four questions could only
+disagree with core about them, and would have to be built again for every
+write.
+
+Without `metric`, core uses its reference metric, which lays the points on a
+line in index order: `|a - b|`. A ruleset written for a point space plays
+headless on it.
+
+The map a point space loads as, from `loadMap`, `scenario.map`, and
+`scenario.mapAt(state)`, is `{ id?, grid: 'points', nearest?, count,
+defaults, cells: [{ index, values }], blocksMove: [{ index }], places:
+{ name: { index } } }`, with `cells` and `blocksMove` in ascending index.
+
+`checkMetric(metric, map)` asks the metric about every pair of cells and
+returns each answer that breaks the rules above. An engine's metric should
+come back with none.
+
 ## Behavior
 
 The rules that hold across areas. A surface's own rules are in its file.
@@ -188,57 +313,11 @@ The rules that hold across areas. A surface's own rules are in its file.
 ### Decisions
 
 Every decision in a match is asked, chosen, and recorded the same way,
-whether the flow asks for a turn or an intent's effects ask for a reaction.
-
-**Ask.**
-
-- A `prompt` names a seat, the params it gives (`with`), and the intents on
-  `offer`. A menu on offer stands for its intents, in place; an intent
-  offered twice is offered once.
-- The runtime enumerates every binding of each offered intent's remaining
-  params: intents in the order offered, params in the order declared, each
-  param's `in` list in the order it evaluates to.
-- An option is a binding whose gates all hold. Domains and gates are
-  evaluated through the deciding seat's view
-  ([Hidden information](#hidden-information)).
-- The decision is the seat and its options, in enumeration order. The order
-  is contract: an option is chosen by its index, and the choice reaches the
-  log.
-- With no option, no decision is made and the prompt ends; `ifNone` runs if
-  this was the prompt's first asking. A decision with one option is still
-  asked.
-- With `repeat`, the seat is asked again after each chosen intent resolves,
-  until an intent runs `done` or there is no option.
-
-**Choose.**
-
-- A driver is given a request and returns the index of one option:
-
-  | Field | Holds |
-  |---|---|
-  | `seat` | The deciding seat. |
-  | `options` | The decision's options. |
-  | `state` | The state through the seat's view. |
-  | `scores(behavior)` | A behavior's score for each option. |
-  | `pick(count)` | An integer in `[0, count)` drawn from the seat's own stream. |
-
-- A driver keeps nothing between decisions. Its only chance is `pick`.
-- Two drivers ship. The random driver picks uniformly. The utility driver
-  takes the option its behavior scores highest, and picks among ties.
-- A seat is driven by what the run binds to it, else by the behavior its
-  scenario names, else at random. Binding a seat the scenario does not
-  have, or a behavior the sets do not hold, is refused.
-- A behavior is compiled against one registry. Scoring with it in a match
-  of another is an error.
-- A person or an agent fills a seat the same way: `advance()` returns the
-  decision, and `submit(index)` takes it.
-
-**Record.**
-
-- The choice is one `intent` entry: `seat`, `intent`, `params`, `of` (how
-  many options there were), and, when the seat drew from its stream, `rng`
-  (where the stream then stood).
-- Choosing an index that is not an option is an error, and records nothing.
+whether the flow asks for a turn or an intent's effects ask for a reaction:
+the runtime enumerates the deciding seat's options, a driver returns the
+index of one, and the choice is one `intent` entry in the log. The contract,
+and how scripted seats choose, is in
+[`docs/spec/decisions.md`](docs/spec/decisions.md).
 
 ### Hidden information
 
@@ -285,6 +364,11 @@ whether the flow asks for a turn or an intent's effects ask for a reaction.
 - A record is worked out from a log alone, and only from the log of a match
   that has ended. It holds nothing that differs between two runs of the same
   seed.
+- `Planned (#13):` A match may be run with a debug override that gives
+  the results of its rolls in place of the seeded stream. A roll made under
+  it is marked in its log entry, and `replay` takes a marked roll from the
+  log, so such a log replays from itself alone (`INV-3`, `INV-4`).
+  Why: an unmarked roll would look like a seeded one and fail replay.
 
 ### The ground
 
@@ -298,18 +382,45 @@ whether the flow asks for a turn or an intent's effects ask for a reaction.
   `state.ground`.
 - Two matches on one map do not see each other's writes.
 
+### Work in proportion to change
+
+`Planned (#13):` `INV-6` binds every part of core. Where it bites:
+
+- **The ground.** A write to one cell does work in proportion to the cells
+  written, not to the size of the map, in core and in the reference host.
+  The rules under [The ground](#the-ground) still hold.
+  Why: the studio scrubs to any point of a log with `fold` and compares
+  maps by identity, so a host that is pushed changes and keeps its own state
+  would break scrubbing and forks.
+- **Globals.** A write to one key of a map-typed global logs that key, as a
+  write to an entity's field does, not the whole map.
+- **Derived values.** A derived value is worked out again only when
+  something it reads has changed.
+- **End conditions.** An end condition is evaluated again only when
+  something it reads has changed.
+- **Decisions.** A seat's awareness, memory, and predictions are worked out
+  again only for what has changed
+  ([`docs/spec/decisions.md`](docs/spec/decisions.md) "Scoring").
+- Each of these is held by a test that counts the work done, and names
+  `INV-6`.
+- [`docs/host.md`](docs/host.md) says what a host is given when the ground
+  changes.
+
 ### Limits
 
 What core does not do today.
 
-- Space is a two-dimensional square grid, or a plane with no grid.
-  `space.vertical` is refused.
+- Space is a two-dimensional square grid, or a plane with no grid, until
+  [Point spaces](#point-spaces) are built. `space.vertical` is refused.
 - A plane with no grid has a size and places. No rule can ask a spatial
   question of it, and no host is built for it.
 - The two space rules read one cell's layers and nothing else.
 - An intent chosen at a prompt returns no value to the effects that
   prompted it, and a signal returns none to what emitted it.
 - A log does not hold its map; it holds what play changed on it.
+- A write to one key of a map-typed global is logged as the whole map, and
+  a write to one cell builds the ground and its host again, until
+  [Work in proportion to change](#work-in-proportion-to-change) is built.
 
 ## Quality bars
 
@@ -330,11 +441,17 @@ What core does not do today.
   for the worker that runs core.
 - **Bounds.** A match takes at most `limits.maxDecisions` decisions, and the
   flow at most a million steps between two decisions.
+- **Cost of a change.** `Planned (#13):` in proportion to what changed
+  (`INV-6`), held by tests that count.
+- **SRD coverage.** `Planned (#13):` every combat rule unit of the SRD 5.2
+  has a status in the ledger
+  ([`docs/spec/srd-ruleset.md`](docs/spec/srd-ruleset.md) "Coverage").
 
 ## Open questions
 
 Undecided, and **not contract** — don't build against these; resolve one by
-editing the spec, then delete it here.
+editing the spec, then delete it here. An area's open questions are in its
+file.
 
 - **Where may a match end?** End conditions are checked after every write,
   so one can hold for a moment in the middle of a rule, and a ruleset with
@@ -347,3 +464,9 @@ editing the spec, then delete it here.
 - **Which run-time failures belong at compile time?** A cycle among derived
   values, a `done` outside a prompt, and a procedure that recurses through a
   signal without bound are all found only when they run.
+- **How is a ground write made proportional?** Hand the host the previous
+  host and the cells that changed; give `SpaceMap` a shape that shares
+  structure between grounds; batch the writes of one effect list; or some
+  of these together.
+- **May an engine answer `cellsWithin` and `neighbors` of a point space
+  itself**, for a map too large to scan with the metric one pair at a time?
