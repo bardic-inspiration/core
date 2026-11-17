@@ -103,17 +103,27 @@ Scoring is a multi-step algorithm. Four levels each supply a part of it:
 | Behavior | Configuration: **profiles**, preset or derived. |
 | Scenario and the current turn | The inputs themselves. |
 
-- **A seat owns its awareness, its memory, and its profile.** Core knows
-  seats, not which entity is acting. A seat that plays several entities
-  knows as one what any of them perceives. A ruleset that wants each
-  creature to know only its own gives each its own seat.
-- A seat's awareness, memory, and predictions are worked out again only for
-  what has changed since they were last worked out (`INV-6`).
-- A seat's **considerations** are assembled from three sources: its
+- **An agent owns its awareness, its memory, and its profile.** An agent
+  is an entity that decides; a prop never does, and knows nothing. A seat
+  owns any number of agents and an agent has exactly one seat, so a seat
+  that plays several creatures decides for each from what that one knows.
+  Why: knowledge held by the seat made every creature of a seat know what
+  any of them perceived, and left a ruleset to split seats to prevent it.
+- A ruleset whose seats decide has an agent for each: in hold 'em a player
+  is the agent under each seat, and the cards and chips are props.
+- **Version 1.1 builds a foundation**, not the whole of this section: a
+  first layer that puts awareness, memory, and prediction to work together
+  at their simplest. Which statements below that layer holds is an open
+  question, and the rest stays a brief for a later version.
+- An agent's awareness, memory, and predictions are worked out again only
+  for what has changed since they were last worked out
+  ([`SPEC.md`](../../SPEC.md) "Work in proportion to change").
+- An agent's **considerations** are assembled from three sources: its
   awareness, its memory, and its predictions.
 - Scoring reads the three and derives a selection set by applying sets of
-  weights that the ruleset and the behavior define. A weight may read
-  anything in the state: an entity's own fields can bear on its scoring.
+  weights that the ruleset and the behavior define. A weight reads only
+  what the agent is aware of or remembers; an agent's own fields can bear
+  on its scoring.
 - A consideration is a named, typed term, mapped through a **response
   curve**, and shared by name between the scores, goals, and behaviors of a
   set and of the sets merged over it.
@@ -124,29 +134,29 @@ Scoring is a multi-step algorithm. Four levels each supply a part of it:
 
 ### Awareness
 
-- Awareness is the part of the current state a seat can perceive.
+- Awareness is the part of the current state an agent can perceive. It is
+  present tense: what is visible to the agent now.
+- **Awareness is what `visible` gives, worked out for an agent.** There is
+  one mechanism, not two: it bounds the options of a decision the agent
+  makes, and it is what the agent's scoring reads.
+- An agent is not aware of anything hidden from it. What it knew of a thing
+  before that thing was hidden is memory, not awareness.
 - The ruleset says how it is worked out. In hold 'em it is whether a card is
   hidden or revealed; in the 5e ruleset it turns on checks such as
   Perception and Insight.
-- By default a seat is aware of everything its own entities hold. A ruleset
-  may make a seat unaware of some of its own values.
-- **Awareness is a second layer over `visible`, related but separate.**
-  `visible` is the legal gate: it bounds a seat's options, and is applied at
-  a decision before the seat's awareness is worked out again.
-- Awareness and `visible` need not agree. A seat may be aware of something
-  it cannot see, as a presence nearby; and may lose sight of something and
-  stay aware that it exists.
-- Awareness is per fact, and has an age. A seat that loses sight of a
-  hiding goblin still knows the goblin exists; what it knows of the goblin's
-  position is what it last perceived, now one turn stale.
-- A seat may act on stale awareness: shoot at where the goblin was, or
-  weigh the hiding places within reach of that square.
+- By default an agent is aware of everything of its own. A ruleset may make
+  an agent unaware of some of its own values.
+- A seat's view is everything any of its agents is aware of.
 
 ### Memory
 
-- Memory is the part of the log a seat perceived, filtered by its awareness
-  as each event occurred: an event is perceived or not, and a perceived
-  event is remembered.
+- Memory is past tense: what an agent was aware of, and the events of the
+  log it perceived as each occurred. An event is perceived or not, and a
+  perceived event is remembered.
+- An agent that loses sight of a hiding goblin is no longer aware of it,
+  and remembers it: that it exists, and where it last perceived it.
+- An agent may act on what it remembers: shoot at where the goblin was, or
+  weigh the hiding places within reach of that square.
 - Memory has a **length**, a whole number of events, and a **decay**: a
   weight on each remembered event that falls with time or with other
   parameters the ruleset names.
@@ -155,33 +165,32 @@ Scoring is a multi-step algorithm. Four levels each supply a part of it:
 
 ### Where memory lives
 
-- The log is core's single source of truth for every event of a match. It
-  is not the source of information for a seat that is deciding: a seat
-  decides from its memory.
-- A seat's memory is state held apart from the log. A memory is not a log
-  entry, and `fold` does not give it.
-  Why: a seat does not read other entities' data when it remembers their
-  behavior, and the log holds all of it.
-- Forming a memory is deterministic, so replaying a log rebuilds every
-  seat's memory as it was, and a snapshot carries it (`INV-3`, `INV-4`).
+- An agent that is deciding does not read the log: it decides from its
+  memory.
+  Why: the log holds every event of the match, and an agent remembers only
+  what it perceived.
+- **What an agent perceived is in the log**, in a form that can be told
+  apart from the rest and left out, so a log of the rules alone does not
+  grow with it. Replaying or folding a log gives every agent's memory as it
+  was (`INV-3`, `INV-4`).
 
 ### Prediction
 
-- Prediction extrapolates from a seat's awareness, and has the same four
+- Prediction extrapolates from an agent's awareness, and has the same four
   levels as the rest of scoring: core's mechanics, the ruleset's definition,
-  the behavior's profile, and the seat's own filtering of its memory, which
-  a ruleset may tie to the fields of the seat's entities.
-- A seat predicts the actions of an entity that is not its own. For one it
-  has not encountered, it applies its own profile to what its awareness
-  shows of the other at that moment.
-- As events caused by the other entity enter its memory, they weight the
+  the behavior's profile, and the agent's own filtering of its memory, which
+  a ruleset may tie to the agent's fields.
+- An agent predicts the actions of another agent. For one it has not
+  encountered, it applies its own profile to what its awareness shows of
+  the other at that moment.
+- As events caused by the other agent enter its memory, they weight the
   prediction.
-- A **prediction** of another entity is a weighted list of the intents it
+- A **prediction** of another agent is a weighted list of the intents it
   may choose next, from the state as it stands. Nothing of the other
-  entity's is played forward.
+  agent's is played forward.
 - The intents a predictor may consider are filtered. The ruleset holds the
-  conditions under which information about another entity is discovered and
-  may be used. In hold 'em every seat knows every intent, and only the
+  conditions under which information about another agent is discovered and
+  may be used. In hold 'em every player knows every intent, and only the
   cards are hidden. In the 5e ruleset what a character knows of another's
   options depends on its situation.
 - Where the predictor does not know the other's options, the list is a
@@ -190,33 +199,33 @@ Scoring is a multi-step algorithm. Four levels each supply a part of it:
   have done.
 - The more precedent memory holds, and the more consistent it is, the more
   memory weighs against the profile's assumptions.
-- A prediction draws only on what the seat itself perceived and still
+- A prediction draws only on what the agent itself perceived and still
   remembers.
 
 ### Predicting itself
 
-- A seat may predict its own actions. This is lookahead: it weighs a
+- An agent may predict its own actions. This is lookahead: it weighs a
   path of its own decisions, not only the next one.
-- By default a seat is fully aware of its own capabilities and fully
+- By default an agent is fully aware of its own capabilities and fully
   confident in them.
-- A path that passes through an outcome of chance outside the seat's
+- A path that passes through an outcome of chance outside the agent's
   control, such as a leap that calls for an Athletics check, carries less
   confidence, by a blind assessment of the probability.
 
-### What a seat does not know
+### What an agent does not know
 
-- **A seat's knowledge and its prediction model are separate.** A prediction
-  never reads another seat's data. It is compiled from precedent in the
-  seat's memory, and falls back on its profile where there is none.
-- Where a path reaches something the seat cannot know (a roll, another
-  entity's decision, a hidden value), the weight comes from the same two
+- **An agent's knowledge and its prediction model are separate.** A
+  prediction never reads another agent's data. It is compiled from
+  precedent in the agent's memory, and falls back on its profile where there is none.
+- Where a path reaches something the agent cannot know (a roll, another
+  agent's decision, a hidden value), the weight comes from the same two
   sources: a default in its profile, and what its memory has taught it.
-- A profile's assumption is conditioned on what the seat is aware of, not
-  on the other entity's state. A worg assumes a hostile creature that has
+- A profile's assumption is conditioned on what the agent is aware of, not
+  on the other agent's state. A worg assumes a hostile creature that has
   not yet used its reaction will make an opportunity attack; it does not
   read the scout's attack bonus or its intent.
 - Memory supports inference about what is hidden. A creature that has hit
-  often against its creature's Armor Class is taken to have a high attack
+  often against its Armor Class is taken to have a high attack
   bonus; a caster seen to cast Shield is taken to have it prepared, and to
   be likely to hold its reaction for it.
 - Where there is no information at all, the profile says what that is
@@ -227,9 +236,8 @@ Scoring is a multi-step algorithm. Four levels each supply a part of it:
 
 - The parameters of awareness, memory, and prediction are bounded by core,
   for performance and to prevent failure; defined within those bounds by the
-  ruleset; and set within the ruleset's definition per seat, from the state.
-  In the 5e ruleset a seat's memory length may follow its creature's
-  Intelligence, its awareness of some types of event its Perception, and the
+  ruleset; and set within the ruleset's definition per agent, from the state.
+  In the 5e ruleset an agent's memory length may follow its Intelligence, its awareness of some types of event its Perception, and the
   weight it gives remembered actions of other creatures its Insight.
 
 ## What scoring is held to
@@ -244,10 +252,10 @@ Scoring is a multi-step algorithm. Four levels each supply a part of it:
   rulesets than the 5e one (`INV-1`).
 - Test fixtures show the pipeline works, as properties over the logs of many
   matches:
-  - an outcome a seat holds less probable is chosen less often;
+  - an outcome an agent holds less probable is chosen less often;
   - profiles configured differently play differently, in the way each
     profile's description says;
-  - a seat more aware of what an entity may do predicts it more accurately.
+  - an agent more aware of what another may do predicts it more accurately.
 - Two failures are looked for by name: information that consistently
   outweighs everything else in a decision, and information that is ignored.
 - Core exposes measures of the pipeline for analysis, so a configuration
@@ -266,8 +274,13 @@ Scoring is a multi-step algorithm. Four levels each supply a part of it:
 - **A scalar param with a range is a parameter of the decision**, not an
   entry in its list. The amount of a raise is given by the seat that chooses
   `raise`.
-- A scripted seat derives such a value from its profile, its awareness, its
-  memory, and its predictions.
+- A scripted seat derives such a value from the deciding agent's profile,
+  awareness, memory, and predictions.
+- **The decision a person or an agent filling a seat is shown is specified
+  with it**: what is listed, what is left for the seat to give, and how
+  the choice is submitted.
+  Why: a hierarchical decision changes what any seat is handed, so the
+  surface is designed once, for scripted seats and the others together.
 - **The legal values of such a param are worked out before the intent is
   offered.** An intent with no legal value is not offered, so a seat is
   never offered what it cannot choose, and a prompt still knows when
@@ -290,9 +303,14 @@ Scoring is a multi-step algorithm. Four levels each supply a part of it:
 
 `Planned (#13):`
 
-- Path distance between two cells is a space function: the length of the
-  shortest route through `neighbors`, in game units. Only a ruleset that
-  declares a grid can call it.
+- Path distance between two cells is the least cost of a route between
+  them, and the ruleset says what a route costs. Core finds the route; it
+  holds no rule of its own about steps, terrain, or diagonals.
+  Why: a grid is itself a rule of the ruleset. The 5e ruleset counts steps
+  on a 5-foot grid and charges more for difficult terrain; another ruleset
+  has other rules, and may have no grid.
+- The rules and the behaviors work a path's cost out from the same
+  declaration.
 
 ## Open questions
 
@@ -310,8 +328,30 @@ Not contract. Resolve one by editing this file, then delete it here.
   weigh? Core has no notion of a turn; the flow is the ruleset's.
 - **How is "like" decided** between a remembered entity and the one being
   predicted, and how are the amount and consistency of precedent measured?
-- **How is awareness's age counted**, when core has no notion of a turn,
-  and how does a stale fact differ from a memory?
+- **How is a memory's age counted**, when core has no notion of a turn? A
+  checkpoint in the flow ([`SPEC.md`](../../SPEC.md) "Open questions") is
+  one unit a ruleset could give it.
+- **Which statements of "Scoring" does version 1.1's foundation hold?** A
+  candidate: awareness as above; memory as the last value an agent
+  perceived of each thing and its age; prediction as the agent's own
+  behavior scoring what it can see of another's options, weighted by how
+  often it remembers that agent choosing each intent. Considerations and
+  response curves, lookahead, and inference about hidden values would stay
+  in the brief. And where the brief lives once the foundation is built.
+- **How does a kind say it is an agent**, and name the seat that owns it?
+  Whether a prompt names the deciding agent, with the seat following from
+  it.
+- **Is a whole entity hidden, or only its fields?** For an agent to be
+  unaware that a hidden creature exists, the creature has to be absent
+  from `all.<kind>` in that agent's view, where reading a hidden field is
+  an error today.
+- **Do only behaviors read memory**, or may a rule or a gate?
+- **How is what an agent perceived written to the log?** A candidate: one
+  entry when an agent becomes aware or unaware of something, so that who
+  perceived any event is whoever was aware at that entry, and the log
+  grows with changes in awareness, not with events times agents. Listing
+  the perceiving agents on every entry is the alternative. Whether the
+  entries sit in the log or in a file beside it, keyed by `seq`.
 - **What is a profile**, and what does a derived one derive from?
 - **What are core's bounds**, as numbers?
 - **Is rule data that exists only for behaviors acceptable**, or does a
@@ -320,9 +360,13 @@ Not contract. Resolve one by editing this file, then delete it here.
   score; and whether a score with more considerations is compensated.
 - **Which response curves exist**, and are they a closed set like the
   effects?
-- **Where does path distance come from?** A seventh host function, or core
-  working it out from `neighbors`. Either changes the host contract's
-  version.
+- **How does a ruleset declare what a route costs?** A candidate: a named
+  path rule giving the cells one step reaches, the cost of the step, and a
+  small state carried along the route, which a cost that depends on the
+  route so far needs (a diagonal that alternates between 5 and 10 feet).
+  Whether the function a rule calls gives one distance, or every cell
+  within a budget with its cost; and what stands for `neighbors` in a
+  ruleset with no grid.
 - **How are a ranged param's legal values declared**, so that they are
   worked out without listing each: as bounds given by expressions, and
   whether a gate may still read the param.

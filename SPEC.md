@@ -59,10 +59,6 @@ green.
 - **`INV-5` — Host-agnostic.** Nothing reachable from `src/index.ts` imports
   Node or touches the file system; core runs unchanged in a browser or a Web
   Worker, and writes the same logs there as in Node.
-- **`INV-6` — Proportional work.** `Planned (#13):` When one thing changes,
-  core does work in proportion to that change, not to the size of what
-  surrounds it. State that did not change, and anything derived from it, is
-  not rebuilt, copied, or logged again.
 
 ## Concepts
 
@@ -78,13 +74,15 @@ model".
 | Kit, pattern | The kit holds named templates; a ruleset or extension uses a pattern with arguments, and it expands into ordinary declarations. |
 | Registry | A compiled ruleset with its extensions: every declaration resolved, every expression type-checked, every address listed. |
 | Entity | An instance of a kind, with an id. |
+| Agent | `Planned (#13):` An entity that decides: a player, a bot, a creature, a unit. It holds knowledge, and exactly one seat owns it. |
+| Prop | `Planned (#13):` An entity that never decides and holds no knowledge: a card, a chip, a boulder. |
 | State | Entities, the links between them, globals, the ground, the position of the rules' dice, and the seats' streams. |
 | Space | A ruleset's declaration of what a map can be, and the two rules the host respects on it. |
 | Map | One playing environment for a ruleset: a document of its own, never changed by play. |
 | Ground | A map with what a match has written to its mutable layers laid over it. |
 | Host | The engine's geometry: six pure functions of one map. |
 | Scenario | Who is seated, which entities are in play and where they stand, on which map, and when the match ends. |
-| Seat | A place at the match that makes decisions. A referee seat may also author changes and rule that an intent happens. |
+| Seat | A place at the match that makes decisions. A referee seat may also author changes and rule that an intent happens. `Planned (#13):` A seat owns any number of agents. |
 | Driver | What fills a seat: it is given a decision and returns one of its options. |
 | Behavior, behavior set | A behavior scores a seat's options; a behavior set is a document of behaviors compiled against a registry. |
 | Prompt | The effect that asks a seat to choose among offered intents. |
@@ -303,6 +301,10 @@ The rules that hold across areas. A surface's own rules are in its file.
   a `roll` of fewer than zero dice or of a die with no sides, a `done`
   outside any prompt, and a flow that runs a million steps without reaching
   a decision.
+- `Planned (#13):` An intent chosen at a prompt can return a value to the
+  effects that prompted it, and a reaction to what emitted its signal.
+  Why: without it, everything a reaction may change in flight is an entity
+  made and destroyed for the purpose, at two log entries each.
 - A kind's checks are enforced when an instance is created and after a
   referee's changes. A rule's `set` does not run them; `Match.violations()`
   reports every check that fails in the current state.
@@ -328,6 +330,12 @@ and how scripted seats choose, is in
 - A referee seat sees everything.
 - The log is not filtered by seat, and the seats' streams are in every
   seat's view.
+- `Planned (#13):` What is visible is worked out for an agent, not for a
+  seat, and it is that agent's awareness: the part of the current state it
+  can perceive. A decision's options and scores are worked out through the
+  deciding agent's view. A seat's own view is everything any of its agents
+  is aware of ([`docs/spec/decisions.md`](docs/spec/decisions.md)
+  "Awareness").
 
 ### Referees
 
@@ -364,6 +372,12 @@ and how scripted seats choose, is in
 - A record is worked out from a log alone, and only from the log of a match
   that has ended. It holds nothing that differs between two runs of the same
   seed.
+- `Planned (#13):` The log's first entry names what wrote it: core's
+  version, the ruleset's id and version, and a hash of the map. `replay`
+  refuses a log that names anything other than what it is given, before it
+  runs a rule.
+  Why: a log from other rules otherwise fails at the first entry that
+  differs, which says nothing of the cause.
 - `Planned (#13):` A match may be run with a debug override that gives
   the results of its rolls in place of the seeded stream. A roll made under
   it is marked in its log entry, and `replay` takes a marked roll from the
@@ -384,27 +398,31 @@ and how scripted seats choose, is in
 
 ### Work in proportion to change
 
-`Planned (#13):` `INV-6` binds every part of core. Where it bites:
+`Planned (#13):` When one thing changes, core aims to do work in proportion
+to that change, not to the size of what surrounds it. State that did not
+change, and anything derived from it, is not rebuilt, copied, or logged
+again. This is the goal optimization is held to, not an invariant: it binds
+the cases listed here, each of which a test can count.
 
-- **The ground.** A write to one cell does work in proportion to the cells
-  written, not to the size of the map, in core and in the reference host.
-  The rules under [The ground](#the-ground) still hold.
-  Why: the studio scrubs to any point of a log with `fold` and compares
-  maps by identity, so a host that is pushed changes and keeps its own state
-  would break scrubbing and forks.
+- **The ground.** A grid's host answers for the geometry of the grid alone,
+  and is built once for a map. Blocking and layers are core's, laid over the
+  host's answers from the ground as it stands, so a write to one cell builds
+  nothing again. The rules under [The ground](#the-ground) still hold,
+  except that a host is no longer built from each ground.
+  Why: a host that answers blocking can only disagree with core about it,
+  and has to be built again for every write. A point space's metric already
+  stands apart from the ground in this way ([Point spaces](#point-spaces)).
 - **Globals.** A write to one key of a map-typed global logs that key, as a
   write to an entity's field does, not the whole map.
 - **Derived values.** A derived value is worked out again only when
   something it reads has changed.
 - **End conditions.** An end condition is evaluated again only when
   something it reads has changed.
-- **Decisions.** A seat's awareness, memory, and predictions are worked out
-  again only for what has changed
+- **Decisions.** An agent's awareness, memory, and predictions are worked
+  out again only for what has changed
   ([`docs/spec/decisions.md`](docs/spec/decisions.md) "Scoring").
-- Each of these is held by a test that counts the work done, and names
-  `INV-6`.
-- [`docs/host.md`](docs/host.md) says what a host is given when the ground
-  changes.
+- Each of these is held by a test that counts the work done, and names this
+  section.
 
 ### Limits
 
@@ -441,8 +459,9 @@ What core does not do today.
   for the worker that runs core.
 - **Bounds.** A match takes at most `limits.maxDecisions` decisions, and the
   flow at most a million steps between two decisions.
-- **Cost of a change.** `Planned (#13):` in proportion to what changed
-  (`INV-6`), held by tests that count.
+- **Cost of a change.** `Planned (#13):` in proportion to what changed, for
+  the cases under [Work in proportion to change](#work-in-proportion-to-change),
+  held by tests that count.
 - **SRD coverage.** `Planned (#13):` every combat rule unit of the SRD 5.2
   has a status in the ledger
   ([`docs/spec/srd-ruleset.md`](docs/spec/srd-ruleset.md) "Coverage").
@@ -456,7 +475,11 @@ file.
 - **Where may a match end?** End conditions are checked after every write,
   so one can hold for a moment in the middle of a rule, and a ruleset with
   such moments has to give its scenarios a marker to wait for. A checkpoint
-  in the flow, or conditions tied to a signal, would say where instead.
+  in the flow, or conditions tied to a signal, would say where instead. A
+  checkpoint effect could also be where kind checks are enforced and
+  awareness is worked out again, and give core a unit to count that a
+  ruleset means something by: a scenario's limit on checkpoints is a limit
+  on turns, where `limits.maxDecisions` only bounds the match.
 - **Should a kind's checks hold after every write?** Today a rule's `set`
   can leave an entity failing a check without stopping the match.
 - **Should the log be filtered by seat?** A seat's view hides state, but
@@ -464,9 +487,23 @@ file.
 - **Which run-time failures belong at compile time?** A cycle among derived
   values, a `done` outside a prompt, and a procedure that recurses through a
   signal without bound are all found only when they run.
-- **How is a ground write made proportional?** Hand the host the previous
-  host and the cells that changed; give `SpaceMap` a shape that shares
-  structure between grounds; batch the writes of one effect list; or some
-  of these together.
+- **Which questions does a geometry-only grid host answer?** `distance`
+  and the adjacency of two cells are geometry. `lineOfSight` needs the
+  cells that block sight: the host could give the cells a line crosses and
+  leave the blocking to core, or be handed the blocking to ask about.
+- **Is ruleset-agnostic design an invariant of its own**, or a clause of
+  `INV-1`? `INV-1` binds the runtime's code, not the concepts core is
+  designed around, and the 5e ruleset is the largest thing shaping them. A
+  testable form: a mechanism enters core only when two shipped rulesets of
+  different genres use it, and no core concept is named for a genre.
+- **What are the performance budgets, as numbers?** The target is an
+  ordinary web game: a browser on mid-range hardware, with no backend.
+  Candidates to measure and bound: the time a scripted decision takes, the
+  time a ruleset takes to compile when a page loads, the size of core's
+  bundle, and the memory a match holds. Most of the work is in reads
+  (enumerating options, scoring them), not in writes.
+- **How does an intent or a reaction return a value?** How the value is
+  declared and typed, and what the returns of several reactions to one
+  signal combine to.
 - **May an engine answer `cellsWithin` and `neighbors` of a point space
   itself**, for a map too large to scan with the metric one pair at a time?
