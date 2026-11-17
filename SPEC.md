@@ -139,7 +139,7 @@ Documents are passed to the API parsed, as plain data; core reads no file.
 
 ### Point spaces
 
-**Planned ([#16](https://github.com/bardic-inspiration/core/issues/16)):**
+**Planned ([#21](https://github.com/bardic-inspiration/core/issues/21)):**
 this whole section.
 
 A space need not have coordinates. With `grid: points` a map is a counted set
