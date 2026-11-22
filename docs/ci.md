@@ -59,7 +59,7 @@ branch name. `gate` still runs on a spike, which is useful to see — but
 
 ## Enforcing project rules
 
-An invariant ([`SPEC.md`](../SPEC.md)) that a machine can check belongs in
+An invariant ([`architecture.md`](architecture.md) "Invariants") that a machine can check belongs in
 `check` — as a lint rule or a test — not in reviewers' memories. Patterns that
 have worked:
 

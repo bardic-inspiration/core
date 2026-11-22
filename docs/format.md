@@ -2,8 +2,6 @@
 
 How a ruleset, an extension, a behavior set, a map, and a scenario are written. This
 is format version 2 (`format: 2`); each ruleset carries its own `version`.
-Format 2 moved behaviors out of rulesets and replaced a scenario's list of
-blocked cells with cell layers.
 
 Every document is YAML, checked against a JSON Schema
 ([`src/schemas.ts`](../src/schemas.ts)) and then resolved. Unknown keys,

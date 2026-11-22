@@ -2,8 +2,9 @@
 
 This is the **authoritative guide** for how work is done in this repository, by
 agents or humans. If another doc disagrees with this one, this one wins —
-except that [`SPEC.md`](SPEC.md) is the source of truth for *what to build*;
-this file is the source of truth for *how to work*.
+except that [`docs/`](docs/README.md) is the source of truth for *what is
+built* and [`SPEC.md`](SPEC.md) for *what to build*; this file is the source
+of truth for *how to work* ([Docs and the spec](#docs-and-the-spec)).
 
 Work is done by AI sessions that start with no memory of earlier ones.
 Nothing carries over except what's in the repo and on GitHub — issues, PRs,
@@ -13,7 +14,7 @@ one session's work legible to the next.
 ## Purpose & scope
 
 What the project is, and what it deliberately isn't, lives in one place:
-[`SPEC.md`](SPEC.md) "Purpose & non-goals". Work bigger than one PR is
+[`docs/architecture.md`](docs/architecture.md) "Purpose & non-goals". Work bigger than one PR is
 sequenced by open plan issues — issues labeled `plan`, with their tasks as
 sub-issues ([`docs/spec-driven-development.md`](docs/spec-driven-development.md)
 "Plans").
@@ -44,9 +45,14 @@ is wrong even if CI is green.
 
 - **Red CI is never merged**, and tests are never skipped, disabled, or
   weakened to get green ([`docs/ci.md`](docs/ci.md)).
-- **Don't silently invent behavior.** If the spec or the task is ambiguous or
-  looks wrong, resolve it in the spec rather than guessing in code.
-- **The project's invariants hold** — [`SPEC.md`](SPEC.md) "Invariants".
+- **Don't silently invent behavior.** If the docs, the spec, or the task is
+  ambiguous or looks wrong, resolve it in the spec rather than guessing in
+  code.
+- **The project's invariants hold** —
+  [`docs/architecture.md`](docs/architecture.md) "Invariants".
+- **`main` is complete after every merge.** A PR that changes behavior
+  updates `docs/` in the same PR, and deletes what it builds from the spec
+  ([Docs and the spec](#docs-and-the-spec)).
 - **One concern per PR**, and only what its task asks for
   ([`docs/workflow.md`](docs/workflow.md) "Scope").
 - **A PR you open is yours until it's merged or closed** — watch its CI and
@@ -54,15 +60,20 @@ is wrong even if CI is green.
 - **Spike code never merges.** A spike's output is its findings; the real
   work is rebuilt through the working loop.
 - **The repo is the memory.** Decisions, follow-ups, and open questions go
-  into the spec, issues, and PR descriptions — never only into a chat the next
-  session can't see.
+  into the docs, the spec, issues, and PR descriptions — never only into a
+  chat the next session can't see.
+- **No version names outside the record.** Docs and code never say when
+  something arrived; [`CHANGELOG.md`](CHANGELOG.md) does
+  ([`docs/documentation.md`](docs/documentation.md) "Present tense; history
+  lives in git").
 
 ## Repo layout
 
 ```
 /
 ├── AGENTS.md          # this file — how to work
-├── SPEC.md            # what to build
+├── SPEC.md            # what to build: design not built yet
+├── CHANGELOG.md       # what each release changed
 ├── CLAUDE.md          # Claude Code: imports this file, adds tool specifics
 ├── CONTRIBUTING.md    # setup for humans
 ├── src/               # core: compile/, runtime/, lib/, host/; index.ts is the entry
@@ -71,7 +82,8 @@ is wrong even if CI is green.
 ├── scripts/           # play, sim, browser, and check.ts (part of the gate)
 ├── tests/             # vitest suites and test-only fixtures
 ├── data/              # recorded matches, checked by the gate
-├── docs/              # protocol docs (routing table below), format.md, host.md, spec/ (spec areas)
+├── docs/              # what is built (index: docs/README.md), and the protocol docs (routing table below)
+├── spec/              # the spec's area files
 ├── archive/           # frozen pre-process docs — background only, never edited
 ├── .claude/           # Claude Code settings, hooks, skills
 └── .github/           # CI, Dependabot, issue & PR templates
@@ -85,8 +97,8 @@ touches the file system; `src/load.ts` and `scripts/` do that.
 1. **Take one task.** Interactive: from chat, or an issue. Routine: the issue
    you were handed, or the next in the queue
    ([`docs/workflow.md`](docs/workflow.md) "The queue").
-2. **Read before you write:** the task, the `SPEC.md` sections it cites, and
-   every doc it references. `git log` on the files you'll touch is context
+2. **Read before you write:** the task, the docs and spec sections it cites,
+   and every doc it references. `git log` on the files you'll touch is context
    too — each commit on `main` is one whole PR, with its why in the body.
 3. **Branch from `main`** ([`docs/workflow.md`](docs/workflow.md) "Branches").
 4. **Test first.** A failing test, the minimal code to pass it, then refactor
@@ -94,7 +106,8 @@ touches the file system; `src/load.ts` and `scripts/` do that.
 5. **Run `check`** (Commands, below). Green before every push.
 6. **Open one PR.** Its title and description become the commit on `main`
    ([`docs/workflow.md`](docs/workflow.md) "Pull requests"). If it changes
-   behavior, it updates `SPEC.md` too.
+   behavior, it updates `docs/` too, and deletes what it built from the
+   spec.
 7. **Watch it to green** — fix red CI and conflicts on the same branch, answer
    review. A human merges.
 
@@ -107,13 +120,15 @@ This loop doesn't apply at all ([`docs/workflow.md`](docs/workflow.md)
 
 | Read | When |
 |---|---|
-| [`docs/spec-driven-development.md`](docs/spec-driven-development.md) | Reading, writing, or changing `SPEC.md`; the spec is silent or wrong; a change is too big for one PR, so it needs a plan. |
-| [`docs/workflow.md`](docs/workflow.md) | Anything Git or GitHub: taking or filing an issue, scope, branching, committing, opening or watching a PR, merging, docs-only changes, spikes. |
+| [`docs/README.md`](docs/README.md) | Finding the reference doc for what is built. |
+| [`docs/spec-driven-development.md`](docs/spec-driven-development.md) | Reading, writing, or changing `SPEC.md`; building part of it; the docs or the spec are silent or wrong; a change is too big for one PR, so it needs a plan. |
+| [`docs/workflow.md`](docs/workflow.md) | Anything Git or GitHub: taking or filing an issue, scope, branching, committing, opening or watching a PR, merging, releases, docs-only changes, spikes. |
 | [`docs/testing.md`](docs/testing.md) | Writing tests. |
 | [`docs/ci.md`](docs/ci.md) | Changing CI or `check`; CI fails in a way you don't understand. |
 | [`docs/documentation.md`](docs/documentation.md) | Writing or editing any doc, naming files, auditing docs for drift. |
 | [`docs/format.md`](docs/format.md) | Writing or changing a ruleset, behavior set, map, or scenario; changing the compiler or the log. |
-| [`docs/host.md`](docs/host.md) | Changing the space host contract or the API an engine drives a match with. |
+| [`docs/api.md`](docs/api.md) | Changing an export, or how an engine drives a match. |
+| [`docs/host.md`](docs/host.md) | Changing the space host contract. |
 
 ## Commands
 
@@ -141,25 +156,52 @@ A change meant to alter how a match plays fails `check` until the recorded
 matches are regenerated with `npm run sim` and committed with it
 ([`data/README.md`](data/README.md)).
 
+## Docs and the spec
+
+- **[`docs/`](docs/README.md) describes what is built** on `main`, in the
+  present tense: the reference an engine, an author, or a session reads.
+- **[`SPEC.md`](SPEC.md) and [`spec/`](spec/) hold the design that isn't
+  built yet**, each section naming the plan issue that builds it. The two
+  never overlap.
+- **Building moves the design.** The PR that builds part of the spec
+  describes it in `docs/` and deletes it from the spec, in the same PR. A PR
+  that changes built behavior updates `docs/`.
+- **At a release,** the docs describe everything the release built and the
+  spec holds only what it didn't. The tag keeps both as they stood
+  (`git show v1.0.0:SPEC.md`), and [`CHANGELOG.md`](CHANGELOG.md) records
+  what changed.
+
+The details: [`docs/spec-driven-development.md`](docs/spec-driven-development.md).
+
 ## Versioning
 
 Core follows [Semantic Versioning](https://semver.org): `MAJOR.MINOR.PATCH`.
 Core's version is `version` in `package.json`, and it covers the host
-contract and the exported API ([`SPEC.md`](SPEC.md) "Interfaces"). A release
-is tagged `vMAJOR.MINOR.PATCH` on `main`.
+contract and the exported API
+([`docs/architecture.md`](docs/architecture.md) "Interfaces"). It is the
+latest release's: only a release PR changes it.
 
-| Bump | When | Commit type |
+| Bump | When | Marked in a PR by |
 |---|---|---|
-| Major | A breaking change: a host, an engine, or a document that worked must change. | `!`, with `BREAKING CHANGE:` |
+| Major | A breaking change: a host, an engine, or a document that worked must change. | `!` in the title, with `BREAKING CHANGE:` |
 | Minor | Something added that breaks nothing. | Usually `feat` |
-| Patch | A fix that changes no contract. | Usually `fix` |
+| Patch | Fixes alone, changing no contract. | Usually `fix` |
 
 - **Write versions in full** — `v1.0.0`, not `v1` or `v1.1` — in docs,
   issues, and PRs.
-- **Bump in the PR that makes the change**
-  ([`docs/workflow.md`](docs/workflow.md) "Versioned surfaces").
-- **Rulesets carry their own versions** under the same rules, and the
-  format its own `format:` number; neither moves with core's.
+- **Rulesets carry their own versions** under the same rules, bumped in the
+  PR that changes the ruleset; the format has its own `format:` number.
+  Neither moves with core's ([`docs/workflow.md`](docs/workflow.md)
+  "Versioned surfaces").
+
+## Releases
+
+A release is a tagged point on `main`, made by a release PR titled
+`release: v<version>`: it sets core's version, and writes the release's
+section of [`CHANGELOG.md`](CHANGELOG.md) from the PRs merged since the last
+tag. After it merges, the owner tags it and publishes the GitHub release.
+Other PRs never edit the changelog. The process:
+[`docs/workflow.md`](docs/workflow.md) "Releases".
 
 ## When in doubt
 

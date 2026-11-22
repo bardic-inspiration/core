@@ -2,10 +2,11 @@
 
 The rules of D&D 5e (SRD 5.2) as a ruleset, the document levels it needs,
 and the testing that shows the model covers them. An area of
-[`SPEC.md`](../../SPEC.md).
+[`SPEC.md`](../SPEC.md).
 
-`Planned (#19):` everything in this file. What `main` has is the
-[5e slice](../../rulesets/dnd-5e-2024-slice/ruleset.yaml): initiative,
+Plan: [#19](https://github.com/bardic-inspiration/core/issues/19). Nothing in
+this file is built yet. What `main` has is the
+[5e slice](../rulesets/dnd-5e-2024-slice/ruleset.yaml): initiative,
 turns, grid movement, weapon attacks, opportunity attacks, saving throws,
 damage types, four conditions, and spellcasting with slots, reactions, and
 concentration, with stat blocks and spells written inline in each scenario.
@@ -107,7 +108,7 @@ its own, and is checked against them.
   recurring type of trait and action once, as a **part** with its numbers
   left open, and a stat block fills parts in.
 - A part is a declaration in the ruleset. It is not a pattern of the kit
-  ([`format.md`](../format.md) "Patterns"), though a part may be written
+  ([`format.md`](../docs/format.md) "Patterns"), though a part may be written
   with one.
 - **A part is a rule unit**: it has its own tests and at least one stat
   block that uses it.
@@ -158,7 +159,7 @@ Five layers, each catching what the others cannot.
   can be measured the same way.
 - **A rule test gives its rolls.** It does not search for a seed. Giving
   rolls is a debug override for tests, not a part of play
-  ([`SPEC.md`](../../SPEC.md) "The log, replay, and forks").
+  ([`SPEC.md`](../SPEC.md) "The roll override").
 
 ## Open questions
 

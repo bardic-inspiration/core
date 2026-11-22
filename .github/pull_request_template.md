@@ -13,7 +13,7 @@ doesn't apply — whatever is left lands in history.
 ## Summary
 
 <!-- What this PR does and why, in two or three sentences, and where it comes
-from (the SPEC.md section it implements). -->
+from (the SPEC.md section it builds, or the docs/ section it changes). -->
 
 ## Linked issue
 
