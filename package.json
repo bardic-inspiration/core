@@ -1,9 +1,13 @@
 {
-  "name": "rpg-core",
-  "version": "0.1.0",
+  "name": "core",
+  "version": "1.0.0",
+  "private": true,
   "description": "A ludematic core: open-ended game rulesets as pure data, played by one generic runtime.",
   "type": "module",
   "license": "MIT",
+  "engines": {
+    "node": ">=22.6"
+  },
   "main": "src/index.ts",
   "scripts": {
     "test": "tsc --noEmit && vitest run",
