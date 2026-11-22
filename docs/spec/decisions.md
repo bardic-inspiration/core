@@ -111,7 +111,7 @@ Scoring is a multi-step algorithm. Four levels each supply a part of it:
   any of them perceived, and left a ruleset to split seats to prevent it.
 - A ruleset whose seats decide has an agent for each: in hold 'em a player
   is the agent under each seat, and the cards and chips are props.
-- **Version 1.1 builds a foundation**, not the whole of this section: a
+- **v1.1.0 builds a foundation**, not the whole of this section: a
   first layer that puts awareness, memory, and prediction to work together
   at their simplest. Which statements below that layer holds is an open
   question, and the rest stays a brief for a later version.
@@ -331,7 +331,7 @@ Not contract. Resolve one by editing this file, then delete it here.
 - **How is a memory's age counted**, when core has no notion of a turn? A
   checkpoint in the flow ([`SPEC.md`](../../SPEC.md) "Open questions") is
   one unit a ruleset could give it.
-- **Which statements of "Scoring" does version 1.1's foundation hold?** A
+- **Which statements of "Scoring" does v1.1.0's foundation hold?** A
   candidate: awareness as above; memory as the last value an agent
   perceived of each thing and its age; prediction as the agent's own
   behavior scoring what it can see of another's options, weighted by how

@@ -141,6 +141,26 @@ A change meant to alter how a match plays fails `check` until the recorded
 matches are regenerated with `npm run sim` and committed with it
 ([`data/README.md`](data/README.md)).
 
+## Versioning
+
+Core follows [Semantic Versioning](https://semver.org): `MAJOR.MINOR.PATCH`.
+Core's version is `version` in `package.json`, and it covers the host
+contract and the exported API ([`SPEC.md`](SPEC.md) "Interfaces"). A release
+is tagged `vMAJOR.MINOR.PATCH` on `main`.
+
+| Bump | When | Commit type |
+|---|---|---|
+| Major | A breaking change: a host, an engine, or a document that worked must change. | `!`, with `BREAKING CHANGE:` |
+| Minor | Something added that breaks nothing. | Usually `feat` |
+| Patch | A fix that changes no contract. | Usually `fix` |
+
+- **Write versions in full** — `v1.0.0`, not `v1` or `v1.1` — in docs,
+  issues, and PRs.
+- **Bump in the PR that makes the change**
+  ([`docs/workflow.md`](docs/workflow.md) "Versioned surfaces").
+- **Rulesets carry their own versions** under the same rules, and the
+  format its own `format:` number; neither moves with core's.
+
 ## When in doubt
 
 - **The spec is silent, ambiguous, or wrong** → don't guess. If proceeding
