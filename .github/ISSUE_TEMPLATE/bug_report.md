@@ -12,7 +12,7 @@ assignees: ""
 
 ## Expected
 
-<!-- What should happen, and the SPEC.md section that says so. -->
+<!-- What should happen, and the docs/ section that says so. -->
 
 ## Reproduction
 
@@ -25,7 +25,7 @@ whatever pins it down (seed, input, config). -->
 
 ## Notes
 
-<!-- Which invariant (SPEC.md "Invariants"), if any, this touches. -->
+<!-- Which invariant (docs/architecture.md "Invariants"), if any, this touches. -->
 
 ## TL;DR
 

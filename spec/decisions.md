@@ -1,98 +1,21 @@
 # Spec: decisions
 
-How a seat's decision is asked for, chosen, and recorded, and how scripted
-seats choose. An area of [`SPEC.md`](../../SPEC.md).
+Plan: [#19](https://github.com/bardic-inspiration/core/issues/19).
 
-The syntax of prompts and behavior sets is in
-[`format.md`](../format.md) "Prompts and the flow" and "Behaviors"; the calls
-an engine makes are in [`host.md`](../host.md) "Driving a match".
+The decision model not yet built: explaining a choice, scoring by agents
+from their awareness, memory, and predictions, decisions with large ranges,
+declared selection, and path distance. An area of [`SPEC.md`](../SPEC.md).
+How decisions work today is in [`docs/decisions.md`](../docs/decisions.md).
 
-Core is genre-neutral (`INV-1`): every mechanism here is one any ruleset can
-use, and what is specific to a kind of play, such as tactics on a grid,
-lives in a behavior set, never in the runtime.
+## Explaining a choice
 
-## Ask, choose, record
-
-Every decision in a match goes through the same three stages.
-
-### Ask
-
-- A `prompt` effect names a seat, the params it gives (`with`), and the
-  intents or menus on `offer`. A menu stands for its intents, in place; an
-  intent offered twice is offered once.
-- The runtime enumerates every binding of the offered intents' remaining
-  params: intents in the order offered, params in the order declared, each
-  param's `in` list in its own order.
-- An **option** is a binding whose gates all hold. Domains and gates are
-  evaluated through the deciding seat's view.
-- The **decision** is the seat and its options, in enumeration order. The
-  order is contract: it reaches the log.
-- With no option, no decision is made: `ifNone` runs if this was the
-  prompt's first asking, and the prompt ends. A decision with one option is
-  still asked.
-- With `repeat`, the seat is asked again after each chosen intent resolves,
-  until an intent runs `done` or there is no option.
-
-### Choose
-
-- A **driver** is given a request and returns the index of one option:
-
-  | Field | Holds |
-  |---|---|
-  | `seat` | The deciding seat. |
-  | `options` | The decision's options. |
-  | `state` | The state through the seat's view. |
-  | `scores(behavior)` | A behavior's score for each option. |
-  | `pick(count)` | An integer in `[0, count)` drawn from the seat's own stream. |
-
-- A driver keeps nothing between decisions. Its only chance is `pick`.
-- A seat's stream is keyed by the match seed and the seat, and is apart from
-  the rules' dice.
-- Two drivers ship. The random driver picks uniformly. The utility driver
-  takes the option its behavior scores highest and picks among ties.
-- A seat is driven by the behavior the run binds to it, else the one its
-  scenario names, else at random. Binding an unknown seat or behavior is
-  refused.
-- A person or an agent fills a seat the same way: `advance()` returns the
-  decision, and `submit(index)` takes it.
-
-### Record
-
-- The choice is one `intent` entry: `seat`, `intent`, `params`, `of` (how
-  many options there were), `cause`, and, when the seat drew from its
-  stream, `rng` (where the stream then stood).
-- Choosing an index that is not an option is an error and records nothing.
-- A replay or a fork restores each seat's stream from the log, so a decision
-  chosen again is chosen the same way (`INV-3`, `INV-4`).
-
-## Behaviors
-
-- A behavior gives a **score** per intent: a numeric expression over that
-  intent's params and `seat`, evaluated through the seat's view. An intent
-  it does not score counts as 0.
-- A **goal** has a name, a condition, and a factor per intent. While its
-  condition holds for an option, that option's score is multiplied by the
-  factor. Goals apply in the order declared. A negative factor reverses a
-  score.
-- Behavior sets given together merge in order: a later set adds behaviors,
-  and adds to or replaces the scores and goals of earlier ones, a goal by
-  its name.
-- A behavior set is compiled against one registry, and scoring with it in a
-  match of another is an error.
-
-## Explaining
-
-- `match.explain()` gives, for the pending decision, every candidate binding
-  of every offered intent, legal or not, with each gate's result and every
-  host call made. Its legal candidates are the decision's options, in order.
-- `Planned (#19):` **A choice can be explained.** For a pending decision
-  and a behavior: each option's score, the value of each consideration that
-  made it, and each goal that scaled it.
-- Explaining changes nothing in the match.
+- **A choice can be explained.** For a pending decision and a behavior:
+  each option's score, the value of each consideration that made it, and
+  each goal that scaled it. Like the rest of explaining
+  ([`docs/decisions.md`](../docs/decisions.md) "Explaining"), it changes
+  nothing in the match.
 
 ## Scoring
-
-`Planned (#19):`
 
 Scoring is a multi-step algorithm. Four levels each supply a part of it:
 
@@ -111,13 +34,13 @@ Scoring is a multi-step algorithm. Four levels each supply a part of it:
   any of them perceived, and left a ruleset to split seats to prevent it.
 - A ruleset whose seats decide has an agent for each: in hold 'em a player
   is the agent under each seat, and the cards and chips are props.
-- **Version 1.1 builds a foundation**, not the whole of this section: a
+- **v2.0.0 builds a foundation**, not the whole of this section: a
   first layer that puts awareness, memory, and prediction to work together
   at their simplest. Which statements below that layer holds is an open
   question, and the rest stays a brief for a later version.
 - An agent's awareness, memory, and predictions are worked out again only
   for what has changed since they were last worked out
-  ([`SPEC.md`](../../SPEC.md) "Work in proportion to change").
+  ([`SPEC.md`](../SPEC.md) "Work in proportion to change").
 - An agent's **considerations** are assembled from three sources: its
   awareness, its memory, and its predictions.
 - Scoring reads the three and derives a selection set by applying sets of
@@ -242,8 +165,6 @@ Scoring is a multi-step algorithm. Four levels each supply a part of it:
 
 ## What scoring is held to
 
-`Planned (#19):`
-
 - **The aim is a decision model that responds to its configuration**, not
   the one that wins most. A dull goblin plays like a dull goblin, a
   brilliant wizard like a brilliant wizard, a reckless barbarian like a
@@ -262,8 +183,6 @@ Scoring is a multi-step algorithm. Four levels each supply a part of it:
   can be refined against them.
 
 ## Decisions with large ranges
-
-`Planned (#19):`
 
 - **A decision is hierarchical.** An intent whose params have a very large
   range is not listed once per binding. In hold 'em the decision's list is
@@ -292,16 +211,12 @@ Scoring is a multi-step algorithm. Four levels each supply a part of it:
 
 ## Selection
 
-`Planned (#19):`
-
 - A behavior declares how it selects: the highest score, or a pick among the
   highest weighted by score, drawn from the seat's stream.
   Why: weighted selection gives varied play from one behavior and stays
   deterministic.
 
 ## Path distance
-
-`Planned (#19):`
 
 - Path distance between two cells is the least cost of a route between
   them, and the ruleset says what a route costs. Core finds the route; it
@@ -329,9 +244,9 @@ Not contract. Resolve one by editing this file, then delete it here.
 - **How is "like" decided** between a remembered entity and the one being
   predicted, and how are the amount and consistency of precedent measured?
 - **How is a memory's age counted**, when core has no notion of a turn? A
-  checkpoint in the flow ([`SPEC.md`](../../SPEC.md) "Open questions") is
+  checkpoint in the flow ([`SPEC.md`](../SPEC.md) "Open questions") is
   one unit a ruleset could give it.
-- **Which statements of "Scoring" does version 1.1's foundation hold?** A
+- **Which statements of "Scoring" does v2.0.0's foundation hold?** A
   candidate: awareness as above; memory as the last value an agent
   perceived of each thing and its age; prediction as the agent's own
   behavior scoring what it can see of another's options, weighted by how

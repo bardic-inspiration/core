@@ -7,8 +7,8 @@ assignees: ""
 ---
 
 <!--
-A plan holds only the *how*: order, slicing, and done-criteria. The behavior
-it builds is written into SPEC.md, marked `Planned (#<this issue>):`. Each
+A plan holds only the *how*: order, slicing, and done-criteria. The design
+it builds is written into SPEC.md, each section naming this issue. Each
 phase's tasks become sub-issues of this one when the phase opens. Lifecycle:
 docs/spec-driven-development.md "Plans".
 -->
@@ -19,7 +19,7 @@ docs/spec-driven-development.md "Plans".
 
 ## Spec changes
 
-<!-- The SPEC.md sections this plan adds or changes — marked Planned there. -->
+<!-- The SPEC.md sections this plan builds, and the docs/ files they will change. -->
 
 ## Phases
 

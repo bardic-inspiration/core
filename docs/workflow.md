@@ -17,8 +17,9 @@ the next session — or you, next month — can find it.
   work it won't finish itself; a task that comes from chat and lands in this
   session's PR needs no issue — the PR description carries it.
 - **Sized for one PR.** If it won't fit, split it before starting.
-- **Testable acceptance criteria**, derived from the `SPEC.md` section the
-  issue cites. They're the failing tests to write first
+- **Testable acceptance criteria**, derived from the section the issue
+  cites: the spec section it builds, or the docs section whose behavior it
+  fixes or changes. They're the failing tests to write first
   ([`testing.md`](testing.md)); if one can't become a test, it isn't specific
   enough yet.
 - **Out of scope, stated** — the first guard against creep.
@@ -75,8 +76,8 @@ creep later — it just becomes permanent drift. Every PR is one concern:
   gets one line pointing at it — not a `TODO`, not a note buried in the PR.
 - **A PR that outgrows its task means the task was under-scoped.** Split the
   extra ground into issues rather than growing the PR.
-- **Two lists name the tempting-but-out-of-scope work:** the spec's non-goals
-  (what the project never does) and each open plan's "Out of scope" (what
+- **Two lists name the tempting-but-out-of-scope work:** the non-goals in
+  [`architecture.md`](architecture.md) (what the project never does) and each open plan's "Out of scope" (what
   this stretch of work leaves for later).
 
 **When something unplanned comes up,** ask one question: does proceeding mean
@@ -112,7 +113,7 @@ type(scope): imperative subject
 ```
 
 - **Types:** `feat`, `fix`, `docs`, `test`, `refactor`, `chore`, `ci`,
-  `build`, `style`.
+  `build`, `style`, and `release` for a release PR ([Releases](#releases)).
 - **Scope** (optional): the lowercase name of the package, module, or area.
 - **Breaking changes:** `!` after the type or scope (`feat(api)!: ...`), plus
   a `BREAKING CHANGE:` line in the PR description saying what breaks.
@@ -134,16 +135,24 @@ Core's versioned surfaces:
 |---|---|---|
 | The format: rulesets, behaviors, maps, scenarios | `format:` in each document | [`format.md`](format.md) |
 | Each ruleset | `version:` in its `ruleset.yaml` | The ruleset |
-| The host contract and the exported API | `version` in `package.json` | [`host.md`](host.md) |
+| The host contract and the exported API | `version` in `package.json` | [`host.md`](host.md), [`api.md`](api.md) |
 | The log | Every recorded match's `logHash` | [`format.md`](format.md), [`data/README.md`](../data/README.md) |
 
-A change to a versioned surface includes its version bump (additive → minor,
-breaking → major) in the same PR, and the PR says under `BREAKING CHANGE:`
-what an author or a host must change. A surface never changes silently: a
-change to how a match plays changes its `logHash`, and the gate fails until
-the recorded matches are regenerated with `npm run sim` and committed in the
-same PR. With no outside consumers yet, the PR descriptions are the
-changelog.
+A breaking change to any of them is marked `!` in the PR title, and the PR
+says under `BREAKING CHANGE:` what an author, an engine, or a host must
+change. How each moves:
+
+- **A ruleset's `version`** is bumped in the PR that changes the ruleset
+  (additive → minor, breaking → major), with every document written for it,
+  so the compiler's version check ([`matches.md`](matches.md) "Compiling")
+  stays true on `main`.
+- **`format:`** goes up by one in the PR that breaks the format.
+- **Core's `version`** in `package.json` is the latest release's. PRs leave
+  it alone; the release PR sets it from the changes since the last tag
+  ([Releases](#releases)).
+- **The log** never changes silently: a change to how a match plays changes
+  its `logHash`, and the gate fails until the recorded matches are
+  regenerated with `npm run sim` and committed in the same PR.
 
 ## Pull requests
 
@@ -166,8 +175,8 @@ the record matches what landed.
   the sections that don't apply and every guidance comment.
 - **Link its task:** `Closes #N` for an issue. A chat task with no issue
   states the task and its acceptance criteria in the Summary instead.
-- **Say where it comes from** — the `SPEC.md` section it implements — so a
-  reader can trace commit → PR → issue → spec.
+- **Say where it comes from** — the spec section it builds, or the docs
+  section it changes — so a reader can trace commit → PR → issue → spec.
 - **End with a `## TL;DR`:** plain-English bullets — why, and what changes.
   It's the reviewer's fast path, and it lands in history as the plain-English
   line of the project.
@@ -181,9 +190,10 @@ commit on `main`.
 
 - [ ] Tests written first, and passing; `check` green
       ([`AGENTS.md`](../AGENTS.md) "Commands").
-- [ ] `SPEC.md` describes the behavior as merged — updated if behavior
-      changed, and any `Planned` marker this PR fulfils removed.
-- [ ] Other docs updated if behavior changed.
+- [ ] `docs/` describes the behavior as merged — updated if behavior
+      changed, and what this PR builds deleted from the spec.
+- [ ] A breaking change is marked `!`, with `BREAKING CHANGE:`, and any
+      ruleset it changes has its `version` bumped.
 - [ ] One concern, scoped to its task; the invariants still hold.
 - [ ] Title and description written for `git log`.
 
@@ -225,6 +235,44 @@ the PR's own comments are the report. How a session watches is tool-specific
 - **Dependency updates** from Dependabot need no issue: read what changed, and
   merge when green.
 
+## Releases
+
+A release is a tagged point on `main`. Core isn't published to a package
+registry; a release is its tag and its GitHub release.
+
+- **Version numbers** take [Semantic Versioning](https://semver.org)'s
+  `MAJOR.MINOR.PATCH` form, for core's host contract and exported API
+  ([`AGENTS.md`](../AGENTS.md) "Versioning"): major for a breaking change,
+  minor for an addition, patch for fixes alone.
+- **Tags** are `v<version>`, on the release PR's squash commit on `main`,
+  each with a GitHub release whose notes are its changelog section.
+  `package.json`'s `version` is the latest release's. v1.0.0 is an internal
+  pre-release: its GitHub release is marked as a pre-release.
+- **The changelog**, [`CHANGELOG.md`](../CHANGELOG.md), follows
+  [Keep a Changelog](https://keepachangelog.com/en/1.1.0/): newest release
+  first, one section per release under `## [<version>] - <YYYY-MM-DD>`, with
+  only the groups that apply of `Added`, `Changed`, `Deprecated`, `Removed`,
+  `Fixed`, and `Security`. Lines are written for someone using core — an
+  engine, or a ruleset's author — not copied from commits, and cite their
+  PRs. Each version links to its compare view at the bottom of the file.
+- **A release PR** is titled `release: v<version>`, on a branch
+  `release/v<version>`. It sets `version` in `package.json` and the lockfile
+  (`npm version <version> --no-git-tag-version`), writes the release's
+  changelog section from the PRs merged since the last tag
+  (`git log <tag>..main`, one squash commit per PR), and dates it the day it
+  merges. The bump follows from those PRs: any marked `!` makes it major.
+  Other PRs don't edit the changelog, so parallel sessions never conflict
+  over it.
+- **Before it opens,** the docs describe what the release built and the
+  spec holds only what it didn't
+  ([`spec-driven-development.md`](spec-driven-development.md) "Releases").
+- **After the merge,** the owner tags the squash commit and publishes the
+  GitHub release.
+- **Version names.** Versions are named by their tags, written in full.
+  Before v1.0.0, plan #19's version was called v1.1; it is v2.0.0, because it
+  breaks the host contract. Issue and PR titles from before then keep the old
+  name.
+
 ## Docs-only changes
 
 A change is **docs-only** when every changed file ends in `.md`. Anything
@@ -235,9 +283,9 @@ code change. When in doubt, it's a code change.
   Markdown-only diff by itself ([`ci.md`](ci.md)).
 - **Issues:** a substantive change (a new doc, a rule change) gets one, using
   the Docs change template; a trivial fix (a typo, a broken link) doesn't.
-- **A `SPEC.md` change** follows
-  [`spec-driven-development.md`](spec-driven-development.md): anything it
-  describes that `main` doesn't do yet is marked `Planned`.
+- **A spec change** follows
+  [`spec-driven-development.md`](spec-driven-development.md): the spec holds
+  only what `main` doesn't do yet, each section naming its plan.
 - **Still required:** correct content, links that resolve, cross-references
   updated in the same PR, no process narration in doc content, and the TL;DR.
 

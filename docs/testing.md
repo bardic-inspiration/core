@@ -39,7 +39,7 @@ it can't talk its way past.
 
 ## Tests that guard invariants
 
-Every invariant in [`SPEC.md`](../SPEC.md) that a machine can check has a
+Every invariant in [`architecture.md`](architecture.md) "Invariants" that a machine can check has a
 test or lint rule that fails when it breaks. Name the invariant's ID in it
 (`INV-2`), so a failure points straight at the rule, and `grep INV-2` finds
 everything that enforces it.

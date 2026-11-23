@@ -32,10 +32,9 @@ One test needs Chromium; install it once with `npx playwright install chromium`.
 
 ## Documentation
 
-- [`docs/format.md`](docs/format.md) — the ruleset, behavior, map, and
-  scenario format, and the event log.
-- [`docs/host.md`](docs/host.md) — what an engine implements to drive a match.
-- [`SPEC.md`](SPEC.md) — what core does.
+- [`docs/`](docs/README.md) — what core does: the format, the API, the
+  space host, and how a match runs.
+- [`SPEC.md`](SPEC.md) — design not built yet.
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) — setup and how to contribute.
 - [`AGENTS.md`](AGENTS.md) — the full working guide, for humans and AI agents.
 

@@ -5,25 +5,35 @@ defect.
 
 ## Source of truth
 
-- [`SPEC.md`](../SPEC.md) is authoritative for **what to build**; code
-  conforms to it ([`spec-driven-development.md`](spec-driven-development.md)).
+- [`docs/`](README.md) is authoritative for **what is built**: the
+  reference for `main`.
+- [`SPEC.md`](../SPEC.md) is authoritative for **what to build**: design not
+  built yet, which moves to `docs/` as it is built
+  ([`spec-driven-development.md`](spec-driven-development.md)).
 - [`AGENTS.md`](../AGENTS.md) is authoritative for **how to work**.
 - **Every fact has one home.** Other docs describe it in a line and link
   there — duplication drifts.
 
 ## Present tense; history lives in git
 
-- Docs describe the project **as it is now**. The active future lives in
-  plan issues on GitHub; the past lives in git — squash commits, PRs, and
+- Docs describe the project **as it is now**. Designed future work lives
+  in the spec, and its plans in issues on GitHub; the past lives in
+  [`CHANGELOG.md`](../CHANGELOG.md) and git — squash commits, PRs, and
   issues ([`spec-driven-development.md`](spec-driven-development.md)
-  "Three tenses, three homes").
+  "Four homes").
+- **No version names outside the record.** Docs and code (comments, test
+  names, messages) never say when something arrived ("added in v1.2.0",
+  "now that X is built"). When something changed is in the changelog. A doc
+  names a version only where releases are its subject, as
+  [`workflow.md`](workflow.md) "Releases" does, where the spec names the
+  version a plan builds, or to cite a tag or an issue by its title.
 - A doc that has done its job is deleted, not moved to an archive folder.
   Superseded text is replaced, not struck through or annotated.
 - **One exception:** [`archive/`](../archive/) holds the prototype's brief,
   decision log, and handoff note from before this process was adopted. It is
   frozen — read it for background, never edit it, never add to it, and never
   treat it as describing `main`. What it says that still holds belongs in the
-  spec.
+  docs, or in the spec if it isn't built.
 - **No process narration.** Docs don't reference chat sessions, "as
   discussed," or session links. How a change came to be belongs in its PR
   description, which becomes the commit body on `main`.
@@ -61,8 +71,8 @@ defect.
 - **Root meta-files** keep the open-source convention of `ALL-CAPS.md`:
   `README.md`, `CONTRIBUTING.md`, `CHANGELOG.md`, `LICENSE`, `AGENTS.md`,
   `CLAUDE.md`, `SPEC.md`.
-- **Everything under `docs/`:** `kebab-case.md`. Spec areas, once the spec is
-  split, are `docs/spec/<area>.md`.
+- **Everything under `docs/` and `spec/`:** `kebab-case.md`. Spec areas,
+  once the spec is split, are `spec/<area>.md`.
 - **Stable IDs** that docs cite, like invariants: a short uppercase prefix
   plus a number (`INV-3`). Never reuse or renumber one; retire it.
 - **Branches, commits, and labels:** [`workflow.md`](workflow.md).
@@ -85,12 +95,12 @@ defect.
 
 The docs are reconciled periodically, not continuously. An audit checks that:
 
-- **the spec describes `main`** — no stale statements, no `Planned` marker
-  whose plan issue is closed, no history (version annotations, amendment tables,
-  past-tense narration);
-- **only live documents exist** — nothing future-tense or finished lives as
-  a file outside the frozen [`archive/`](../archive/), and resolved open
-  questions are gone from the spec;
+- **the docs describe `main`** — no stale statements, and no history
+  (version annotations, amendment tables, past-tense narration);
+- **the spec holds only what isn't built** — nothing `main` already does,
+  no section naming a closed plan, and no resolved open questions;
+- **only live documents exist** — nothing finished lives as a file outside
+  the frozen [`archive/`](../archive/);
 - **status matches GitHub** — anything the docs report about what's built or
   what's next matches the actual issues, PRs, and milestones;
 - **links resolve**, and cross-references use identical spelling;
